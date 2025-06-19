@@ -60,7 +60,7 @@ class HomeScreen extends StatelessWidget {
             "seeds": CupertinoIcons.leaf_arrow_circlepath,
             "honey": CupertinoIcons.drop_fill,
             "cosmetics": CupertinoIcons.wand_stars,
-            "egg": CupertinoIcons.egg_fill,
+            "egg": CupertinoIcons.eye,
           };
 
           // Usamos las categorías de los detalles para construir las pestañas,
