@@ -1,0 +1,37 @@
+name: grow_garden_tracker
+description: "A new Flutter project."
+publish_to: 'none'
+version: 0.1.0
+
+environment:
+  sdk: ^3.6.2
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # ESTILO Y UI
+  cupertino_icons: ^1.0.8 # Iconos con estilo de iOS.
+  glass_kit: ^4.0.1          # Para crear fácilmente el efecto Glassmorphism.
+  fluttertoast: ^8.2.6           # Para las notificaciones "toast" in-app.
+  lottie: ^3.1.2                # Para animaciones fluidas (ej. en pantallas de carga).
+  web_socket_channel: ^2.4.5 # Para la comunicación en tiempo real
+  # GESTIÓN DE ESTADO Y ARQUITECTURA
+  flutter_bloc: ^9.1.1            # State Management. Ideal para SOLID, separa la lógica de la UI.
+  equatable: ^2.0.5             # Para comparar objetos en BLoC de forma eficiente.
+  glassmorphism: ^3.0.0
+  # LÓGICA DE FONDO Y NOTIFICACIONES
+  flutter_background_service: ^5.0.1 # El motor para que la app corra en segundo plano.
+  flutter_local_notifications: ^19.2.1 # Para crear y mostrar notificaciones 100% locales.
+  audioplayers: ^6.0.0            # Para reproducir la alarma del "Fruit Sniper".
+  vibration: ^3.1.3               # Para la vibración del "Fruit Sniper".
+
+  # RED Y DATOS
+  http: ^1.2.1                    # Para hacer las llamadas a la API.
+  intl: ^0.20.2                   # Para formatear fechas y horas correctamente.
+  shared_preferences: ^2.2.3    # Para guardar la lista de items del "Fruit Sniper".
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0           # Para mantener el código limpio y con buenas prácticas.
