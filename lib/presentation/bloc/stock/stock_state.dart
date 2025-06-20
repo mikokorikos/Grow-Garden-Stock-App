@@ -3,33 +3,50 @@ part of 'stock_bloc.dart';
 
 abstract class StockState extends Equatable {
   const StockState();
-
   @override
   List<Object?> get props => [];
 }
 
 class StockInitial extends StockState {}
 
-/// Estado mientras se obtienen los detalles de los ítems (la primera carga).
-class StockLoadingDetails extends StockState {}
+class StockLoading extends StockState {}
 
-/// Estado principal: la app está escuchando y mostrando datos en tiempo real.
-class StockListening extends StockState {
+class StockActive extends StockState {
   final Map<String, List<StockItemEntity>> stockData;
   final Map<String, ItemInfoEntity> itemDetails;
+  final List<WeatherEntity> weather;
+  final DateTime? nearestEndDate;
 
-  const StockListening({required this.stockData, required this.itemDetails});
+  const StockActive({
+    required this.stockData,
+    required this.itemDetails,
+    required this.weather,
+    this.nearestEndDate,
+  });
 
   @override
-  List<Object?> get props => [stockData, itemDetails];
+  List<Object?> get props => [stockData, itemDetails, weather, nearestEndDate];
 }
 
-/// Estado para manejar cualquier error crítico (ej. fallo al obtener detalles).
+class StockPolling extends StockState {
+  final Map<String, List<StockItemEntity>> lastKnownStockData;
+  final Map<String, ItemInfoEntity> itemDetails;
+  final List<WeatherEntity> lastKnownWeather;
+
+  const StockPolling({
+    required this.lastKnownStockData,
+    required this.itemDetails,
+    required this.lastKnownWeather,
+  });
+
+  @override
+  List<Object?> get props =>
+      [lastKnownStockData, itemDetails, lastKnownWeather];
+}
+
 class StockError extends StockState {
   final String message;
-
   const StockError(this.message);
-
   @override
   List<Object> get props => [message];
 }

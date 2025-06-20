@@ -25,7 +25,7 @@ dependencies:
   flutter_local_notifications: ^19.2.1 # Para crear y mostrar notificaciones 100% locales.
   audioplayers: ^6.0.0            # Para reproducir la alarma del "Fruit Sniper".
   vibration: ^3.1.3               # Para la vibración del "Fruit Sniper".
-
+  cached_network_image: ^3.3.1
   # RED Y DATOS
   http: ^1.2.1                    # Para hacer las llamadas a la API.
   intl: ^0.20.2                   # Para formatear fechas y horas correctamente.

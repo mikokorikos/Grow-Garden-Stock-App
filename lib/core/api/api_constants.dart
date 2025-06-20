@@ -1,5 +1,11 @@
+// Archivo: lib/core/api/api_constants.dart
 class ApiConstants {
-  static const String webSocketUrl = 'wss://websocket.joshlei.com/growagarden/';
-  static const String itemInfoBaseUrl = 'https://growagardenapi.vercel.app/api';
-  static const String itemInfoEndpoint = '/Item-Info';
+  // Al añadir 'static', podemos acceder a estas variables desde cualquier
+  // parte de la app usando ApiConstants.baseUrl, sin necesidad de crear
+  // una instancia de la clase.
+
+  static const String baseUrl = 'https://api.joshlei.com/v2/growagarden';
+  static const String stockEndpoint = '/stock';
+  static const String weatherEndpoint = '/weather';
+  static const String itemInfoEndpoint = '/info';
 }
