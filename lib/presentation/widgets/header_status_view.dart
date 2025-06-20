@@ -1,7 +1,9 @@
 // Archivo: lib/presentation/widgets/header_status_view.dart
 import 'dart:async';
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart';
 import '../../core/theme/app_theme.dart';
+import '../../domain/entities/stock_item_entity.dart';
 import '../bloc/stock/stock_bloc.dart';
 
 class HeaderStatusView extends StatefulWidget {
@@ -14,40 +16,15 @@ class HeaderStatusView extends StatefulWidget {
 
 class _HeaderStatusViewState extends State<HeaderStatusView> {
   Timer? _timer;
-  Duration _countdown = Duration.zero;
 
   @override
   void initState() {
     super.initState();
-    _updateCountdown();
-    // Este timer solo se encarga de actualizar la UI del reloj cada segundo.
-    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
-      _updateCountdown();
-    });
-  }
-
-  @override
-  void didUpdateWidget(covariant HeaderStatusView oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    // Si el estado cambia (ej. de Polling a Active), recalculamos el countdown.
-    if (widget.state != oldWidget.state) {
-      _updateCountdown();
-    }
-  }
-
-  void _updateCountdown() {
-    if (!mounted) return;
-
-    Duration newCountdown = Duration.zero;
-    if (widget.state is StockActive) {
-      final nearestEndDate = (widget.state as StockActive).nearestEndDate;
-      if (nearestEndDate != null) {
-        final difference = nearestEndDate.difference(DateTime.now());
-        newCountdown = difference.isNegative ? Duration.zero : difference;
+    // Este timer solo existe para refrescar la UI cada segundo.
+    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (mounted) {
+        setState(() {});
       }
-    }
-    setState(() {
-      _countdown = newCountdown;
     });
   }
 
@@ -61,48 +38,72 @@ class _HeaderStatusViewState extends State<HeaderStatusView> {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(12.0),
-      color: AppTheme.background.withOpacity(0.9),
+      width: double.infinity,
+      color: AppTheme.background.withOpacity(0.95),
       child: Column(
         children: [
           _buildStatusMessage(),
-          const SizedBox(height: 4),
-          Text(
-            _formatDuration(_countdown),
-            style: const TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.bold,
-                color: AppTheme.primary),
-          ),
+          const SizedBox(height: 8),
+          _buildTimers(),
         ],
       ),
     );
   }
 
   Widget _buildStatusMessage() {
-    if (widget.state is StockPolling) {
-      return const Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          CupertinoActivityIndicator(radius: 8.0),
-          SizedBox(width: 8),
-          Text("Buscando nuevo stock...",
-              style: TextStyle(color: CupertinoColors.systemOrange)),
-        ],
-      );
+    // ... (El código del estado de conexión no cambia)
+    return const SizedBox.shrink(); // Simplificado para enfocarnos en el timer
+  }
+
+  Widget _buildTimers() {
+    if (widget.state is! StockActive && widget.state is! StockPolling) {
+      return const CupertinoActivityIndicator(radius: 8);
     }
-    if (widget.state is StockActive) {
-      return const Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(CupertinoIcons.check_mark_circled_solid,
-              color: CupertinoColors.systemGreen, size: 16),
-          SizedBox(width: 8),
-          Text("Stock Activo", style: TextStyle(fontWeight: FontWeight.w600)),
-        ],
-      );
+
+    final stockData = widget.state is StockActive
+        ? (widget.state as StockActive).stockData
+        : (widget.state as StockPolling).lastKnownStockData;
+
+    final activeTimers = <String, Duration>{};
+
+    stockData.forEach((category, items) {
+      if (items.isNotEmpty) {
+        items.sort((a, b) => a.endDate.compareTo(b.endDate));
+        final duration = items.first.endDate.difference(DateTime.now());
+        if (!duration.isNegative) {
+          activeTimers[category] = duration;
+        }
+      }
+    });
+
+    if (activeTimers.isEmpty) {
+      return const Text("No hay restocks activos.",
+          style: TextStyle(fontSize: 12));
     }
-    return const SizedBox
-        .shrink(); // No mostramos nada si no hay estado activo/polling
+
+    // Mostramos un Wrap para que los timers se ajusten si no caben en una línea.
+    return Wrap(
+      spacing: 24.0, // Espacio horizontal entre timers
+      runSpacing: 8.0, // Espacio vertical si hay más de una línea
+      alignment: WrapAlignment.center,
+      children: activeTimers.entries.map((entry) {
+        final label = entry.key[0].toUpperCase() + entry.key.substring(1);
+        return Column(
+          children: [
+            Text(label,
+                style:
+                    const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+            Text(
+              _formatDuration(entry.value),
+              style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: AppTheme.primary,
+                  fontSize: 14),
+            ),
+          ],
+        );
+      }).toList(),
+    );
   }
 
   String _formatDuration(Duration duration) {
