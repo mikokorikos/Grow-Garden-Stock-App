@@ -32,16 +32,32 @@ class StockPolling extends StockState {
   final Map<String, List<StockItemEntity>> lastKnownStockData;
   final Map<String, ItemInfoEntity> itemDetails;
   final List<WeatherEntity> lastKnownWeather;
+  final String? message; // Mensaje para mostrar en la UI, ej: "Intentando de nuevo en X segundos..."
 
   const StockPolling({
     required this.lastKnownStockData,
     required this.itemDetails,
     required this.lastKnownWeather,
+    this.message,
   });
 
   @override
   List<Object?> get props =>
-      [lastKnownStockData, itemDetails, lastKnownWeather];
+      [lastKnownStockData, itemDetails, lastKnownWeather, message];
+
+  StockPolling copyWith({
+    Map<String, List<StockItemEntity>>? lastKnownStockData,
+    Map<String, ItemInfoEntity>? itemDetails,
+    List<WeatherEntity>? lastKnownWeather,
+    String? message,
+  }) {
+    return StockPolling(
+      lastKnownStockData: lastKnownStockData ?? this.lastKnownStockData,
+      itemDetails: itemDetails ?? this.itemDetails,
+      lastKnownWeather: lastKnownWeather ?? this.lastKnownWeather,
+      message: message ?? this.message,
+    );
+  }
 }
 
 class StockError extends StockState {

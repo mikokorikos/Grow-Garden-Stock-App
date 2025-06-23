@@ -60,9 +60,24 @@ class _HeaderStatusViewState extends State<HeaderStatusView> {
       return const CupertinoActivityIndicator(radius: 8);
     }
 
+    // Prioridad 1: Mostrar mensaje de reintento si está disponible en StockPolling
+    if (widget.state is StockPolling) {
+      final pollingState = widget.state as StockPolling;
+      if (pollingState.message != null && pollingState.message!.isNotEmpty) {
+        return Text(
+          pollingState.message!,
+          style: const TextStyle(fontSize: 12, color: AppTheme.primary),
+          textAlign: TextAlign.center,
+        );
+      }
+    }
+
+    // Obtener stockData según el estado actual
     final stockData = widget.state is StockActive
         ? (widget.state as StockActive).stockData
-        : (widget.state as StockPolling).lastKnownStockData;
+        : (widget.state is StockPolling // Asegurarse de que es StockPolling antes de castear
+            ? (widget.state as StockPolling).lastKnownStockData
+            : <String, List<StockItemEntity>>{}); // Fallback a mapa vacío si no es ni Active ni Polling
 
     final activeTimers = <String, Duration>{};
 
@@ -76,12 +91,23 @@ class _HeaderStatusViewState extends State<HeaderStatusView> {
       }
     });
 
+    // Prioridad 2: Si no hay mensaje de reintento y no hay timers activos, mostrar "No hay restocks activos"
     if (activeTimers.isEmpty) {
+      // Evitar mostrar "No hay restocks activos" si ya estamos mostrando un mensaje de sondeo.
+      // Esto se maneja con la comprobación de pollingState.message más arriba.
+      // Si llegamos aquí y state es StockPolling pero sin mensaje, es un caso que no debería ocurrir
+      // si el BLoC siempre establece un mensaje. Pero por si acaso:
+      if (widget.state is StockPolling && (widget.state as StockPolling).message != null) {
+        // Ya se manejó arriba, no hacer nada aquí para evitar duplicar texto.
+        // O, si el mensaje es la única fuente de verdad cuando se está sondeando:
+        return const SizedBox.shrink();
+      }
       return const Text("No hay restocks activos.",
           style: TextStyle(fontSize: 12));
     }
 
     // Mostramos un Wrap para que los timers se ajusten si no caben en una línea.
+    // Prioridad 3: Mostrar los timers activos
     return Wrap(
       spacing: 24.0, // Espacio horizontal entre timers
       runSpacing: 8.0, // Espacio vertical si hay más de una línea
