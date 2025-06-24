@@ -171,7 +171,10 @@ class StockBloc extends Bloc<StockEvent, StockState> {
     debugPrint("[$methodName] Timer primario cancelado (si existía).");
 
     final nearestEndDate = _calculateNearestEndDate(stockData);
-    debugPrint("[$methodName] Nearest end date calculada: $nearestEndDate");
+    // El log de nearestEndDate calculada se movió a _calculateNearestEndDate para reducir verbosidad aquí si no hay cambios.
+    // Sin embargo, es útil loguearlo aquí también para el contexto de _startPrimaryCountdown.
+    debugPrint("[$methodName] Nearest end date evaluada para el countdown: $nearestEndDate");
+
 
     if (nearestEndDate != null) {
       final durationUntilEnd = nearestEndDate.difference(DateTime.now());
@@ -179,16 +182,33 @@ class StockBloc extends Bloc<StockEvent, StockState> {
 
       if (!durationUntilEnd.isNegative) {
         final timerDuration = durationUntilEnd + const Duration(seconds: 20);
-        debugPrint("[$methodName] Iniciando timer primario con duración: $timerDuration");
+        debugPrint("[$methodName] Iniciando timer primario con duración: $timerDuration. Se esperará hasta $nearestEndDate + 20s.");
         _primaryCountdownTimer = Timer(timerDuration, () {
-          debugPrint("[$methodName] Timer primario disparado. Añadiendo evento _PrimaryTimerElapsed.");
+          debugPrint("[$methodName] Timer primario disparado (espera por $nearestEndDate finalizada). Añadiendo evento _PrimaryTimerElapsed.");
           add(_PrimaryTimerElapsed());
         });
       } else {
-        debugPrint("[$methodName] NearestEndDate ya pasó. No se inicia el timer primario.");
+        debugPrint("[$methodName] NearestEndDate ($nearestEndDate) ya pasó. No se inicia el timer primario. Se podría considerar iniciar polling directamente si es el comportamiento deseado.");
+        // Si se quisiera iniciar polling inmediatamente en este caso:
+        // if (state is StockActive || state is StockInitial) { // Evitar múltiples inicios de polling si ya está en StockPolling
+        //   add(_PrimaryTimerElapsed()); // Esto simularía que el timer acaba de expirar
+        // }
       }
     } else {
-      debugPrint("[$methodName] No hay nearestEndDate. No se inicia el timer primario.");
+      debugPrint("[$methodName] No hay nearestEndDate (es nula). No se inicia el timer primario. El sistema podría depender del polling si está activo, o esperar nueva data.");
+       // Si no hay fecha, y el estado es activo, podría ser una señal para empezar a pollear si no se está haciendo ya.
+       // Esto es importante para el caso "No hay restocks activos"
+      if (state is StockActive) {
+         final currentState = state as StockActive;
+         // Si no hay fecha de fin, y no estamos ya en polling, y no hay items (o los items no tienen fecha),
+         // es un indicativo de que "no hay restocks activos" o los datos iniciales no tienen fechas.
+         bool hasAnyEndDate = currentState.stockData.values.expand((list) => list).any((item) => item.endDate != null);
+         if (!hasAnyEndDate) {
+            debugPrint("[$methodName] No hay nearestEndDate y ningún item en el stock actual tiene fecha de finalización. Posiblemente 'No hay restocks activos'.");
+         }
+         // Considerar si se debe pasar a polling aquí si no hay fecha y no se está polleando.
+         // Por ahora, solo se loguea. La lógica de _onPrimaryTimerElapsed se encargará del polling.
+      }
     }
   }
 
