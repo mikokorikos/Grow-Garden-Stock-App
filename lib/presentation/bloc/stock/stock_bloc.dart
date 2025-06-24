@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
-// Se añade la importación para la comparación profunda
 import 'package:collection/collection.dart';
 
 import '../../../core/error/exceptions.dart';
@@ -37,6 +36,8 @@ class StockBloc extends Bloc<StockEvent, StockState> {
     on<_PrimaryTimerElapsed>(_onPrimaryTimerElapsed);
     on<_PollForStockUpdate>(_onPollForStockUpdate);
   }
+
+  get _primaryCoundownTimer => null;
 
   void _logEvent(StockEvent event) {
     debugPrint("[$_className] ==> Evento Recibido: ${event.runtimeType}");
@@ -101,6 +102,12 @@ class StockBloc extends Bloc<StockEvent, StockState> {
         "[$methodName] El contador principal ha finalizado. El stock activo (si lo había) ha expirado.");
 
     if (state is StockActive) {
+      // *** AQUÍ ESTÁ TU SOLUCIÓN IMPLEMENTADA ***
+      // Se reinicia el contador de intentos para que el próximo sondeo sea inmediato.
+      debugPrint(
+          "[$methodName] Reiniciando contador de intentos de sondeo a 0.");
+      _pollingAttempt = 0;
+
       final currentState = state as StockActive;
       debugPrint(
           "[$methodName] Transicionando de StockActive a StockPolling para buscar nuevo stock.");
@@ -132,7 +139,6 @@ class StockBloc extends Bloc<StockEvent, StockState> {
     }
 
     final currentState = state as StockPolling;
-    // Guardamos una referencia al stock viejo para la comparación
     final oldStockData = currentState.lastKnownStockData;
 
     try {
@@ -140,14 +146,12 @@ class StockBloc extends Bloc<StockEvent, StockState> {
           "[$methodName] Llamando a GetStockAndWeatherUseCase para actualizar...");
       final (newStockData, newWeatherData) = await getStockAndWeather();
 
-      // LÓGICA DE COMPARACIÓN MEJORADA
       debugPrint(
           "[$methodName] Realizando comparación profunda (deep equality) entre el stock viejo y el nuevo.");
       final bool areStocksEqual =
           const DeepCollectionEquality().equals(oldStockData, newStockData);
 
       if (!areStocksEqual) {
-        // Si NO son iguales, significa que hubo un cambio en CUALQUIER item.
         debugPrint(
             "[$methodName] ¡Cambio detectado en el stock! Actualizando a StockActive.");
         _pollingAttempt = 0;
@@ -165,7 +169,6 @@ class StockBloc extends Bloc<StockEvent, StockState> {
         _logStateChange(activeState);
         emit(activeState);
       } else {
-        // Si son idénticos, no hubo ningún cambio.
         debugPrint(
             "[$methodName] Sin cambios detectados en el stock. Programando siguiente sondeo.");
         _scheduleNextPoll();
@@ -214,7 +217,7 @@ class StockBloc extends Bloc<StockEvent, StockState> {
         });
       } else {
         debugPrint(
-            "[$methodName] NearestEndDate ($nearestEndDate) ya pasó. No se inicia timer.");
+            "[$methodName] NearestEndDate ($nearestEndDate) ya pasó. Disparando _PrimaryTimerElapsed inmediatamente.");
         add(_PrimaryTimerElapsed());
       }
     } else {
@@ -238,7 +241,7 @@ class StockBloc extends Bloc<StockEvent, StockState> {
   Future<void> close() {
     final methodName = "$_className.close";
     debugPrint("[$methodName] Cerrando StockBloc y cancelando timers...");
-    _primaryCountdownTimer?.cancel();
+    _primaryCoundownTimer?.cancel();
     _pollingTimer?.cancel();
     return super.close();
   }
