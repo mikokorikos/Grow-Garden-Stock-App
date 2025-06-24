@@ -1,3 +1,5 @@
+// Archivo: lib/data/models/weather_model.dart
+import 'package:flutter/foundation.dart';
 import '../../domain/entities/weather_entity.dart';
 
 class WeatherModel extends WeatherEntity {
@@ -8,6 +10,7 @@ class WeatherModel extends WeatherEntity {
   });
 
   factory WeatherModel.fromJson(Map<String, dynamic> json) {
+    debugPrint('[WeatherModel.fromJson] Parseando: $json');
     return WeatherModel(
       name: json['weather_name'] ?? 'N/A',
       isActive: json['active'] ?? false,

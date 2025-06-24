@@ -12,29 +12,37 @@ class HomeScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    const methodName = "HomeScreen.build";
+    debugPrint("[$methodName] Construyendo widget...");
+
     return BlocListener<StockBloc, StockState>(
-      listener: (previous, current) {
-        // Mostramos un toast cuando se actualiza el stock
-        if (previous is StockActive &&
-            current is StockActive &&
-            !const DeepCollectionEquality()
-                .equals(previous.stockData, current.stockData)) {
+      listener: (context, state) {
+        debugPrint(
+            "[$methodName.BlocListener] El estado del StockBloc ha cambiado a: ${state.runtimeType}");
+        if (state is StockActive) {
           Fluttertoast.showToast(msg: "Stock actualizado");
+          debugPrint(
+              "[$methodName.BlocListener] Mostrando Toast: Stock actualizado.");
         }
       },
       child: BlocBuilder<StockBloc, StockState>(
         builder: (context, state) {
+          debugPrint(
+              "[$methodName.BlocBuilder] Reconstruyendo UI con estado: ${state.runtimeType}");
+
           if (state is StockInitial || state is StockLoading) {
+            debugPrint(
+                "[$methodName.BlocBuilder] Mostrando pantalla de carga.");
             return _buildLoadingScreen("Cargando stock...");
           }
 
           if (state is StockError) {
+            debugPrint(
+                "[$methodName.BlocBuilder] Mostrando pantalla de error: ${state.message}");
             return _buildErrorScreen(context, state.message);
           }
 
-          // Si estamos en estado Activo o de Sondeo, mostramos la UI principal.
           if (state is StockActive || state is StockPolling) {
-            // Extraemos los datos del estado actual, sea cual sea.
             final stockData = state is StockActive
                 ? state.stockData
                 : (state as StockPolling).lastKnownStockData;
@@ -51,15 +59,18 @@ class HomeScreen extends StatelessWidget {
             };
             final allCategories = categoryIcons.keys.toList();
 
+            debugPrint(
+                "[$methodName.BlocBuilder] Mostrando UI principal (CupertinoTabScaffold).");
             return CupertinoPageScaffold(
               child: Column(
                 children: [
-                  // Pasamos el estado al Header para que pueda mostrar "Actualizando..." si es necesario.
                   SafeArea(
                       bottom: false, child: HeaderStatusView(state: state)),
                   Expanded(
                     child: CupertinoTabScaffold(
                       tabBar: CupertinoTabBar(
+                        onTap: (index) => debugPrint(
+                            "[$methodName] Tab seleccionado: ${allCategories[index]}"),
                         items: allCategories.map((cat) {
                           final label = cat[0].toUpperCase() + cat.substring(1);
                           return BottomNavigationBarItem(
@@ -68,10 +79,10 @@ class HomeScreen extends StatelessWidget {
                       ),
                       tabBuilder: (context, index) {
                         final categoryKey = allCategories[index];
-                        final label = categoryKey[0].toUpperCase() +
-                            categoryKey.substring(1);
+                        debugPrint(
+                            "[$methodName.tabBuilder] Construyendo tab para la categoría: $categoryKey");
                         return CategoryTabScreen(
-                          categoryName: label,
+                          categoryName: categoryKey,
                           items: stockData[categoryKey] ?? [],
                           itemDetails: itemDetails,
                         );
@@ -83,13 +94,14 @@ class HomeScreen extends StatelessWidget {
             );
           }
 
+          debugPrint(
+              "[$methodName.BlocBuilder] Estado no manejado, mostrando carga por defecto.");
           return _buildLoadingScreen("Inicializando...");
         },
       ),
     );
   }
 
-  /// Widget helper reutilizable para mostrar una pantalla de carga estándar.
   Widget _buildLoadingScreen(String message) {
     return CupertinoPageScaffold(
       child: Center(
@@ -105,7 +117,6 @@ class HomeScreen extends StatelessWidget {
     );
   }
 
-  /// Widget helper reutilizable para mostrar una pantalla de error con un botón para reintentar.
   Widget _buildErrorScreen(BuildContext context, String message) {
     return CupertinoPageScaffold(
       child: Center(
@@ -123,8 +134,11 @@ class HomeScreen extends StatelessWidget {
               const SizedBox(height: 24),
               CupertinoButton.filled(
                 child: const Text("Reintentar"),
-                onPressed: () =>
-                    context.read<StockBloc>().add(FetchInitialData()),
+                onPressed: () {
+                  debugPrint(
+                      "[HomeScreen._buildErrorScreen] Botón 'Reintentar' presionado. Añadiendo FetchInitialData.");
+                  context.read<StockBloc>().add(FetchInitialData());
+                },
               ),
             ],
           ),
@@ -132,8 +146,4 @@ class HomeScreen extends StatelessWidget {
       ),
     );
   }
-}
-
-extension on BuildContext {
-  Object? get stockData => null;
 }

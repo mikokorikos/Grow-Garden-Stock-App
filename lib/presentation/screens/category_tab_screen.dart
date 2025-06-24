@@ -1,6 +1,7 @@
+// Archivo: lib/presentation/screens/category_tab_screen.dart
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart'; // Necesario para el Material en el diálogo
-import '../../core/theme/app_theme.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import '../../domain/entities/item_info_entity.dart';
 import '../../domain/entities/stock_item_entity.dart';
 import '../widgets/stock_item_card.dart';
@@ -19,11 +20,17 @@ class CategoryTabScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final methodName = "CategoryTabScreen.build";
+    debugPrint(
+        "[$methodName] Construyendo pantalla para categoría: '$categoryName' con ${items.length} items.");
+
     return CupertinoPageScaffold(
-      navigationBar: CupertinoNavigationBar(middle: Text(categoryName)),
+      navigationBar: CupertinoNavigationBar(
+        middle: Text(categoryName[0].toUpperCase() + categoryName.substring(1)),
+      ),
       child: SafeArea(
         child: items.isEmpty
-            ? const Center(child: Text("No hay stock para esta categoría."))
+            ? Center(child: Text("No hay stock para '$categoryName'."))
             : GridView.builder(
                 padding: const EdgeInsets.all(16.0),
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
@@ -34,6 +41,8 @@ class CategoryTabScreen extends StatelessWidget {
                 itemCount: items.length,
                 itemBuilder: (context, index) {
                   final stockItem = items[index];
+                  debugPrint(
+                      "[$methodName] Construyendo StockItemCard para: '${stockItem.displayName}'");
                   final info = itemDetails[stockItem.displayName];
                   return StockItemCard(
                     stockItem: stockItem,
@@ -49,11 +58,13 @@ class CategoryTabScreen extends StatelessWidget {
 
   void _showItemDetailDialog(BuildContext context,
       {required StockItemEntity stockItem, ItemInfoEntity? itemInfo}) {
+    final methodName = "CategoryTabScreen._showItemDetailDialog";
+    debugPrint(
+        "[$methodName] Mostrando diálogo de detalles para: '${stockItem.displayName}'");
     showCupertinoModalPopup(
       context: context,
       builder: (ctx) => CupertinoPopupSurface(
         child: Material(
-          // Material para que se vea el texto
           color: CupertinoTheme.of(context).scaffoldBackgroundColor,
           child: Padding(
             padding: const EdgeInsets.all(20.0),
@@ -77,7 +88,10 @@ class CategoryTabScreen extends StatelessWidget {
                 const SizedBox(height: 24),
                 CupertinoButton.filled(
                     child: const Text('Cerrar'),
-                    onPressed: () => Navigator.of(ctx).pop()),
+                    onPressed: () {
+                      debugPrint("[$methodName] Cerrando diálogo de detalles.");
+                      Navigator.of(ctx).pop();
+                    }),
               ],
             ),
           ),
@@ -92,10 +106,8 @@ class CategoryTabScreen extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label,
-              style: const TextStyle(
-                  fontWeight: FontWeight.w600, color: AppTheme.textColor)),
-          Text(value, style: const TextStyle(color: AppTheme.textColor)),
+          Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
+          Text(value),
         ],
       ),
     );

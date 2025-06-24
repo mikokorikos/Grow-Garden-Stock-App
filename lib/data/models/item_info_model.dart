@@ -1,3 +1,5 @@
+// Archivo: lib/data/models/item_info_model.dart
+import 'package:flutter/foundation.dart';
 import '../../domain/entities/item_info_entity.dart';
 
 class ItemInfoModel extends ItemInfoEntity {
@@ -12,6 +14,7 @@ class ItemInfoModel extends ItemInfoEntity {
   });
 
   factory ItemInfoModel.fromJson(Map<String, dynamic> json) {
+    debugPrint('[ItemInfoModel.fromJson] Parseando: ${json['name']}');
     return ItemInfoModel(
       name: json['name'] ?? 'N/A',
       category: json['category'] ?? 'N/A',

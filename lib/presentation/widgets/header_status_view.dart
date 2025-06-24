@@ -1,9 +1,8 @@
 // Archivo: lib/presentation/widgets/header_status_view.dart
 import 'dart:async';
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import '../../core/theme/app_theme.dart';
-import '../../domain/entities/stock_item_entity.dart';
 import '../bloc/stock/stock_bloc.dart';
 
 class HeaderStatusView extends StatefulWidget {
@@ -16,11 +15,13 @@ class HeaderStatusView extends StatefulWidget {
 
 class _HeaderStatusViewState extends State<HeaderStatusView> {
   Timer? _timer;
+  Set<String> _lastActiveTimers = {};
 
   @override
   void initState() {
     super.initState();
-    // Este timer solo existe para refrescar la UI cada segundo.
+    debugPrint(
+        "[HeaderStatusView.initState] Inicializando y creando timer periódico de 1s.");
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (mounted) {
         setState(() {});
@@ -30,12 +31,16 @@ class _HeaderStatusViewState extends State<HeaderStatusView> {
 
   @override
   void dispose() {
+    debugPrint(
+        "[HeaderStatusView.dispose] Widget destruido. Cancelando timer.");
     _timer?.cancel();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    // No se añade log aquí porque se llamaría cada segundo, es demasiado ruidoso.
+    // La lógica de logging está en _buildTimers.
     return Container(
       padding: const EdgeInsets.all(12.0),
       width: double.infinity,
@@ -51,8 +56,7 @@ class _HeaderStatusViewState extends State<HeaderStatusView> {
   }
 
   Widget _buildStatusMessage() {
-    // ... (El código del estado de conexión no cambia)
-    return const SizedBox.shrink(); // Simplificado para enfocarnos en el timer
+    return const SizedBox.shrink();
   }
 
   Widget _buildTimers() {
@@ -76,15 +80,41 @@ class _HeaderStatusViewState extends State<HeaderStatusView> {
       }
     });
 
+    // --- LÓGICA DE LOGGING COMBINADA ---
+    debugPrint("--- [HeaderStatusView] Pulso de Timers Visuales ---");
+    if (activeTimers.isNotEmpty) {
+      activeTimers.forEach((category, duration) {
+        final label = category[0].toUpperCase() + category.substring(1);
+        debugPrint(
+            "  -> [PULSO] Categoría: $label, Tiempo Restante: ${_formatDuration(duration)}");
+      });
+    } else {
+      debugPrint("  -> [PULSO] No hay timers visuales activos.");
+    }
+
+    final currentActiveTimersSet = activeTimers.keys.toSet();
+    final expiredTimers = _lastActiveTimers.difference(currentActiveTimersSet);
+
+    if (expiredTimers.isNotEmpty) {
+      debugPrint("--- [HeaderStatusView] Evento de Expiración Detectado ---");
+      for (final expiredCategory in expiredTimers) {
+        final label =
+            expiredCategory[0].toUpperCase() + expiredCategory.substring(1);
+        debugPrint(
+            "  -> [EVENTO] El timer VISUAL para la categoría '$label' ha finalizado.");
+      }
+    }
+    _lastActiveTimers = currentActiveTimersSet;
+    // --- FIN DE LA LÓGICA DE LOGGING ---
+
     if (activeTimers.isEmpty) {
       return const Text("No hay restocks activos.",
           style: TextStyle(fontSize: 12));
     }
 
-    // Mostramos un Wrap para que los timers se ajusten si no caben en una línea.
     return Wrap(
-      spacing: 24.0, // Espacio horizontal entre timers
-      runSpacing: 8.0, // Espacio vertical si hay más de una línea
+      spacing: 24.0,
+      runSpacing: 8.0,
       alignment: WrapAlignment.center,
       children: activeTimers.entries.map((entry) {
         final label = entry.key[0].toUpperCase() + entry.key.substring(1);
