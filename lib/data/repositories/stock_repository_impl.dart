@@ -1,4 +1,5 @@
 // Archivo: lib/data/repositories/stock_repository_impl.dart
+import 'package:flutter/foundation.dart';
 import 'package:grow_garden_tracker/data/datasources/stock_rest_data_source.dart';
 
 import '../../domain/entities/item_info_entity.dart';
@@ -12,6 +13,7 @@ import '../models/weather_model.dart';
 class StockRepositoryImpl implements StockRepository {
   final StockRestDataSource stockDataSource;
   final ItemInfoRestDataSource itemInfoDataSource;
+  final String _className = "StockRepositoryImpl";
 
   StockRepositoryImpl({
     required this.stockDataSource,
@@ -21,33 +23,59 @@ class StockRepositoryImpl implements StockRepository {
   @override
   Future<(Map<String, List<StockItemEntity>>, List<WeatherEntity>)>
       getStockAndWeather() async {
-    // Hacemos las dos llamadas a la API en paralelo para optimizar el tiempo.
-    final results = await Future.wait([
-      stockDataSource.getStock(),
-      stockDataSource.getWeather(),
-    ]);
+    final methodName = "$_className.getStockAndWeather";
+    debugPrint("[$methodName] Iniciando...");
 
-    final rawStockData = results[0] as Map<String, dynamic>;
-    final rawWeatherData = results[1] as List<dynamic>;
+    try {
+      // Hacemos las dos llamadas a la API en paralelo para optimizar el tiempo.
+      debugPrint("[$methodName] Solicitando stock y clima a los data sources...");
+      final results = await Future.wait([
+        stockDataSource.getStock(),
+        stockDataSource.getWeather(),
+      ]);
+      debugPrint("[$methodName] Datos de stock y clima recibidos de los data sources.");
 
-    final stockData = <String, List<StockItemEntity>>{};
-    rawStockData.forEach((key, value) {
-      if (value is List && key.endsWith('_stock')) {
-        final categoryName = key.replaceAll('_stock', '');
-        stockData[categoryName] =
-            value.map((item) => StockItemModel.fromJson(item)).toList();
-      }
-    });
+      final rawStockData = results[0] as Map<String, dynamic>;
+      final rawWeatherData = results[1] as List<dynamic>;
+      debugPrint("[$methodName] Datos crudos - Stock: ${rawStockData.keys.length} categorías, Clima: ${rawWeatherData.length} registros.");
 
-    final weatherData =
-        rawWeatherData.map((item) => WeatherModel.fromJson(item)).toList();
+      final stockData = <String, List<StockItemEntity>>{};
+      rawStockData.forEach((key, value) {
+        if (value is List && key.endsWith('_stock')) {
+          final categoryName = key.replaceAll('_stock', '');
+          stockData[categoryName] =
+              value.map((item) => StockItemModel.fromJson(item)).toList();
+        }
+      });
 
-    return (stockData, weatherData);
+      final weatherData =
+          rawWeatherData.map((item) => WeatherModel.fromJson(item)).toList();
+
+      debugPrint("[$methodName] Datos procesados - Stock: ${stockData.keys.length} categorías, Clima: ${weatherData.length} entidades.");
+      debugPrint("[$methodName] Retornando stock y clima procesados.");
+      return (stockData, weatherData);
+    } catch (e, s) {
+      debugPrint("[$methodName] Excepción: $e\nStackTrace: $s");
+      rethrow; // Permite que las capas superiores manejen la excepción
+    }
   }
 
   @override
   Future<Map<String, ItemInfoEntity>> getAllItemsInfo() async {
-    final itemsList = await itemInfoDataSource.getAllItemsInfo();
-    return {for (var item in itemsList) item.name: item};
+    final methodName = "$_className.getAllItemsInfo";
+    debugPrint("[$methodName] Iniciando...");
+    try {
+      debugPrint("[$methodName] Solicitando todos los items info del data source...");
+      final itemsList = await itemInfoDataSource.getAllItemsInfo();
+      debugPrint("[$methodName] Recibidos ${itemsList.length} items info del data source.");
+
+      final result = {for (var item in itemsList) item.name: item};
+      debugPrint("[$methodName] Items info procesados en un mapa de ${result.length} entradas.");
+      debugPrint("[$methodName] Retornando mapa de items info.");
+      return result;
+    } catch (e, s) {
+      debugPrint("[$methodName] Excepción: $e\nStackTrace: $s");
+      rethrow; // Permite que las capas superiores manejen la excepción
+    }
   }
 }
