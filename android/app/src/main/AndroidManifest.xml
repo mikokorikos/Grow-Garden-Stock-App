@@ -26,6 +26,9 @@
     <!-- Permiso para la Fiabilidad 24/7 (Ignorar Ahorro de Batería) -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"/>
 
+<uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+<uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+
 
     <application
         android:label="Grow a Garden Tracker"
