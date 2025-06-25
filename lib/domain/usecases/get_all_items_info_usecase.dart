@@ -1,10 +1,9 @@
-// Archivo: lib/domain/usecases/get_all_items_info_usecase.dart
 import 'package:flutter/foundation.dart';
-import '../entities/item_info_entity.dart';
-import '../repositories/stock_repository.dart';
+import 'package:grow_garden_tracker/domain/entities/item_info_entity.dart';
+import 'package:grow_garden_tracker/domain/repositories/item_info_repository.dart';
 
 class GetAllItemsInfoUseCase {
-  final StockRepository repository;
+  final ItemInfoRepository repository; // <-- Cambio aquí
   final String _className = "GetAllItemsInfoUseCase";
 
   GetAllItemsInfoUseCase(this.repository);
@@ -19,7 +18,7 @@ class GetAllItemsInfoUseCase {
       return result;
     } catch (e, s) {
       debugPrint(
-          "[$methodName] ERROR: Excepción al llamar al repositorio: $e\nStackTrace: $s");
+          "[$methodName] Excepción al llamar al repositorio: $e\nStackTrace: $s");
       rethrow;
     }
   }

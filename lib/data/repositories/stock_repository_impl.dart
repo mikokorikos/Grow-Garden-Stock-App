@@ -1,22 +1,17 @@
-// Archivo: lib/data/repositories/stock_repository_impl.dart
 import 'package:flutter/foundation.dart';
-import '../../domain/entities/item_info_entity.dart';
-import '../../domain/entities/stock_item_entity.dart';
-import '../../domain/entities/weather_entity.dart';
-import '../../domain/repositories/stock_repository.dart';
-import '../datasources/item_info_rest_data_source.dart';
-import '../datasources/stock_rest_data_source.dart';
-import '../models/stock_item_model.dart';
-import '../models/weather_model.dart';
+import 'package:grow_garden_tracker/data/datasources/stock_rest_data_source.dart';
+import 'package:grow_garden_tracker/domain/entities/stock_item_entity.dart';
+import 'package:grow_garden_tracker/domain/entities/weather_entity.dart';
+import 'package:grow_garden_tracker/domain/repositories/stock_repository.dart';
+import 'package:grow_garden_tracker/data/models/stock_item_model.dart';
+import 'package:grow_garden_tracker/data/models/weather_model.dart';
 
 class StockRepositoryImpl implements StockRepository {
   final StockRestDataSource stockDataSource;
-  final ItemInfoRestDataSource itemInfoDataSource;
   final String _className = "StockRepositoryImpl";
 
   StockRepositoryImpl({
     required this.stockDataSource,
-    required this.itemInfoDataSource,
   });
 
   @override
@@ -37,17 +32,26 @@ class StockRepositoryImpl implements StockRepository {
       final rawStockData = results[0] as Map<String, dynamic>;
       final rawWeatherData = results[1] as List<dynamic>;
 
+      // --- LÓGICA DE PARSEO MEJORADA ---
       debugPrint("[$methodName] Mapeando datos crudos de Stock a entidades...");
       final stockData = <String, List<StockItemEntity>>{};
-      rawStockData.forEach((key, value) {
-        if (value is List && key.endsWith('_stock')) {
-          final categoryName = key.replaceAll('_stock', '');
-          stockData[categoryName] =
-              value.map((item) => StockItemModel.fromJson(item)).toList();
+      final knownCategories = ["seed", "gear", "egg", "cosmetic", "eventshop"];
+
+      for (final category in knownCategories) {
+        final apiKey = "${category}_stock";
+        if (rawStockData.containsKey(apiKey) && rawStockData[apiKey] is List) {
+          final itemsList = rawStockData[apiKey] as List;
+          if (itemsList.isNotEmpty) {
+            stockData[category] =
+                itemsList.map((item) => StockItemModel.fromJson(item)).toList();
+            debugPrint(
+                "[$methodName] CORRECTO: Parseados ${itemsList.length} items para la categoría '$category'.");
+          }
+        } else {
+          debugPrint(
+              "[$methodName] ADVERTENCIA: No se encontraron datos para la clave de API '$apiKey'.");
         }
-      });
-      debugPrint(
-          "[$methodName] Mapeo de Stock completado. ${stockData.length} categorías.");
+      }
 
       debugPrint("[$methodName] Mapeando datos crudos de Clima a entidades...");
       final weatherData =
@@ -55,29 +59,9 @@ class StockRepositoryImpl implements StockRepository {
       debugPrint(
           "[$methodName] Mapeo de Clima completado. ${weatherData.length} registros.");
 
-      debugPrint("[$methodName] Retornando datos procesados.");
+      debugPrint(
+          "[$methodName] Retornando datos procesados. Categorías con stock: ${stockData.keys.toList()}");
       return (stockData, weatherData);
-    } catch (e, s) {
-      debugPrint("[$methodName] ERROR: Excepción: $e\nStackTrace: $s");
-      rethrow;
-    }
-  }
-
-  @override
-  Future<Map<String, ItemInfoEntity>> getAllItemsInfo() async {
-    final methodName = "$_className.getAllItemsInfo";
-    debugPrint("[$methodName] Iniciando...");
-    try {
-      debugPrint(
-          "[$methodName] Solicitando todos los items info del data source...");
-      final itemsList = await itemInfoDataSource.getAllItemsInfo();
-      debugPrint(
-          "[$methodName] Recibidos ${itemsList.length} items info. Mapeando a un mapa por nombre.");
-
-      final result = {for (var item in itemsList) item.name: item};
-      debugPrint(
-          "[$methodName] Mapeo completado. Retornando mapa de ${result.length} entradas.");
-      return result;
     } catch (e, s) {
       debugPrint("[$methodName] ERROR: Excepción: $e\nStackTrace: $s");
       rethrow;

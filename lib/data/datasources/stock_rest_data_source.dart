@@ -1,4 +1,3 @@
-// Archivo: lib/data/datasources/stock_rest_data_source.dart
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
@@ -15,6 +14,13 @@ class StockRestDataSourceImpl implements StockRestDataSource {
   final http.Client client;
   final String _className = "StockRestDataSourceImpl";
 
+  // --- CABECERAS MEJORADAS ---
+  // Se define una cabecera estándar para todas las peticiones de esta clase.
+  final Map<String, String> _headers = {
+    'User-Agent':
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/96.0.4664.110 Safari/537.36',
+  };
+
   StockRestDataSourceImpl({required this.client});
 
   @override
@@ -24,25 +30,26 @@ class StockRestDataSourceImpl implements StockRestDataSource {
     debugPrint("[$methodName] Iniciando petición GET a: $url");
 
     try {
-      final response =
-          await client.get(Uri.parse(url)).timeout(const Duration(seconds: 15));
+      // Se añade la cabecera a la petición y se aumenta el timeout a 30 segundos
+      final response = await client
+          .get(Uri.parse(url), headers: _headers)
+          .timeout(const Duration(seconds: 30));
 
-      debugPrint(
-          "[$methodName] Respuesta recibida con statusCode: ${response.statusCode}");
       if (response.statusCode == 200) {
-        debugPrint("[$methodName] Petición exitosa. Decodificando JSON.");
+        debugPrint("[$methodName] Stock recibido con éxito (status 200).");
         return json.decode(response.body);
       } else {
         debugPrint(
-            "[$methodName] ERROR: Respuesta no fue 200. Body: ${response.body}");
+            "[$methodName] Error de servidor para Stock: ${response.statusCode}. Respuesta: ${response.body}");
         throw ServerException();
       }
     } on TimeoutException catch (e, s) {
-      debugPrint("[$methodName] ERROR: TimeoutException: $e\nStackTrace: $s");
+      debugPrint(
+          "[$methodName] ERROR: TimeoutException al obtener Stock: $e\nStackTrace: $s");
       throw ServerException();
     } catch (e, s) {
       debugPrint(
-          "[$methodName] ERROR: Excepción inesperada: $e\nStackTrace: $s");
+          "[$methodName] ERROR: Excepción al obtener Stock: $e\nStackTrace: $s");
       throw ServerException();
     }
   }
@@ -51,37 +58,35 @@ class StockRestDataSourceImpl implements StockRestDataSource {
   Future<List<dynamic>> getWeather() async {
     final methodName = "$_className.getWeather";
     final url = ApiConstants.baseUrl + ApiConstants.weatherEndpoint;
-    debugPrint("[$methodName] Iniciando petición GET a: $url");
+    debugPrint("[$methodName] Haciendo petición GET a: $url");
 
     try {
-      final response =
-          await client.get(Uri.parse(url)).timeout(const Duration(seconds: 15));
+      // Se añade la cabecera a la petición y se aumenta el timeout a 30 segundos
+      final response = await client
+          .get(Uri.parse(url), headers: _headers)
+          .timeout(const Duration(seconds: 30));
 
-      debugPrint(
-          "[$methodName] Respuesta recibida con statusCode: ${response.statusCode}");
       if (response.statusCode == 200) {
-        debugPrint("[$methodName] Petición exitosa. Decodificando JSON.");
         final decodedBody = json.decode(response.body);
         if (decodedBody is Map && decodedBody.containsKey('weather')) {
-          debugPrint(
-              "[$methodName] Llave 'weather' encontrada. Retornando lista.");
           return decodedBody['weather'];
         } else {
           debugPrint(
-              "[$methodName] ERROR: Respuesta de Clima inesperada. No contiene 'weather'. Body: ${response.body}");
+              "[$methodName] Respuesta de Clima inesperada. No contiene 'weather'. Body: ${response.body}");
           throw ServerException();
         }
       } else {
         debugPrint(
-            "[$methodName] ERROR: Respuesta no fue 200. Body: ${response.body}");
+            "[$methodName] Error de servidor para Clima: ${response.statusCode}. Respuesta: ${response.body}");
         throw ServerException();
       }
     } on TimeoutException catch (e, s) {
-      debugPrint("[$methodName] ERROR: TimeoutException: $e\nStackTrace: $s");
+      debugPrint(
+          "[$methodName] ERROR: TimeoutException al obtener Clima: $e\nStackTrace: $s");
       throw ServerException();
     } catch (e, s) {
       debugPrint(
-          "[$methodName] ERROR: Excepción inesperada: $e\nStackTrace: $s");
+          "[$methodName] ERROR: Excepción al obtener Clima: $e\nStackTrace: $s");
       throw ServerException();
     }
   }

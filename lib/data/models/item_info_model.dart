@@ -1,28 +1,34 @@
-// Archivo: lib/data/models/item_info_model.dart
 import 'package:flutter/foundation.dart';
 import '../../domain/entities/item_info_entity.dart';
 
 class ItemInfoModel extends ItemInfoEntity {
   const ItemInfoModel({
     required super.name,
-    required super.category,
     required super.rarity,
     required super.image,
-    required super.buyPrice,
-    required super.sellValue,
-    required super.tradeable,
+    required super.price,
+    required super.currency,
+    required super.description,
   });
 
   factory ItemInfoModel.fromJson(Map<String, dynamic> json) {
-    debugPrint('[ItemInfoModel.fromJson] Parseando: ${json['name']}');
+    // El debugPrint es útil para ver qué se está parseando
+    // debugPrint('[ItemInfoModel.fromJson] Parseando item: ${json['display_name']}');
+
     return ItemInfoModel(
-      name: json['name'] ?? 'N/A',
-      category: json['category'] ?? 'N/A',
-      rarity: json['metadata']?['tier'] ?? json['rarity'] ?? 'N/A',
-      image: json['image'] ?? '',
-      buyPrice: json['metadata']?['buyPrice']?.toString() ?? 'N/A',
-      sellValue: json['metadata']?['sellValue']?.toString() ?? 'N/A',
-      tradeable: json['metadata']?['tradeable'] ?? false,
+      // *** AQUÍ ESTÁ LA CORRECCIÓN CLAVE ***
+      // Leemos de 'display_name' en lugar de 'name'.
+      name: json['display_name'] ?? 'Nombre Desconocido',
+
+      // Asignamos valores por defecto si los campos son nulos o vacíos en la API
+      rarity: (json['rarity'] == null || (json['rarity'] as String).isEmpty)
+          ? 'Común'
+          : json['rarity'],
+
+      image: json['icon'] ?? '',
+      price: json['price']?.toString() ?? '0',
+      currency: json['currency'] ?? 'Sheckles',
+      description: json['description'] ?? '',
     );
   }
 }

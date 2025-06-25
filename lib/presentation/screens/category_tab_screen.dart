@@ -1,73 +1,58 @@
-// Archivo: lib/presentation/screens/category_tab_screen.dart
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import '../../core/theme/app_theme.dart';
 import '../../domain/entities/item_info_entity.dart';
 import '../../domain/entities/stock_item_entity.dart';
 import '../widgets/stock_item_card.dart';
 
 class CategoryTabScreen extends StatelessWidget {
-  final String categoryName;
+  // Ya no necesita el nombre de la categoría, solo los items a mostrar
   final List<StockItemEntity> items;
   final Map<String, ItemInfoEntity> itemDetails;
 
   const CategoryTabScreen({
     super.key,
-    required this.categoryName,
     required this.items,
     required this.itemDetails,
   });
 
   @override
   Widget build(BuildContext context) {
-    final methodName = "CategoryTabScreen.build";
-    debugPrint(
-        "[$methodName] Construyendo pantalla para categoría: '$categoryName' con ${items.length} items.");
+    // Se elimina el CupertinoPageScaffold y la navigationBar
+    if (items.isEmpty) {
+      return const Center(child: Text("No hay stock para esta categoría."));
+    }
 
-    return CupertinoPageScaffold(
-      navigationBar: CupertinoNavigationBar(
-        middle: Text(categoryName[0].toUpperCase() + categoryName.substring(1)),
-      ),
-      child: SafeArea(
-        child: items.isEmpty
-            ? Center(child: Text("No hay stock para '$categoryName'."))
-            : GridView.builder(
-                padding: const EdgeInsets.all(16.0),
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 2,
-                    crossAxisSpacing: 16.0,
-                    mainAxisSpacing: 16.0,
-                    childAspectRatio: 0.8),
-                itemCount: items.length,
-                itemBuilder: (context, index) {
-                  final stockItem = items[index];
-                  debugPrint(
-                      "[$methodName] Construyendo StockItemCard para: '${stockItem.displayName}'");
-                  final info = itemDetails[stockItem.displayName];
-                  return StockItemCard(
-                    stockItem: stockItem,
-                    itemInfo: info,
-                    onTap: () => _showItemDetailDialog(context,
-                        stockItem: stockItem, itemInfo: info),
-                  );
-                },
-              ),
-      ),
+    return GridView.builder(
+      padding: const EdgeInsets.symmetric(horizontal: 16.0),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 2,
+          crossAxisSpacing: 16.0,
+          mainAxisSpacing: 16.0,
+          childAspectRatio: 0.8),
+      itemCount: items.length,
+      itemBuilder: (context, index) {
+        final stockItem = items[index];
+        final info = itemDetails[stockItem.displayName];
+        return StockItemCard(
+          stockItem: stockItem,
+          itemInfo: info,
+          onTap: () => _showItemDetailDialog(context,
+              stockItem: stockItem, itemInfo: info),
+        );
+      },
     );
   }
 
   void _showItemDetailDialog(BuildContext context,
       {required StockItemEntity stockItem, ItemInfoEntity? itemInfo}) {
-    final methodName = "CategoryTabScreen._showItemDetailDialog";
-    debugPrint(
-        "[$methodName] Mostrando diálogo de detalles para: '${stockItem.displayName}'");
     showCupertinoModalPopup(
       context: context,
       builder: (ctx) => CupertinoPopupSurface(
         child: Material(
           color: CupertinoTheme.of(context).scaffoldBackgroundColor,
-          child: Padding(
-            padding: const EdgeInsets.all(20.0),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 40),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -75,23 +60,34 @@ class CategoryTabScreen extends StatelessWidget {
                     style: const TextStyle(
                         fontSize: 22, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 16),
-                Image.network(stockItem.iconUrl, height: 100),
-                const SizedBox(height: 16),
+                Image.network(
+                  stockItem.iconUrl,
+                  height: 100,
+                  errorBuilder: (context, error, stackTrace) =>
+                      const Icon(CupertinoIcons.photo, size: 80),
+                ),
+                if (itemInfo?.description.isNotEmpty ?? false) ...[
+                  const SizedBox(height: 16),
+                  Text(
+                    itemInfo!.description,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                        fontSize: 14,
+                        fontStyle: FontStyle.italic,
+                        color: AppTheme.textColor.withOpacity(0.7)),
+                  ),
+                ],
+                const SizedBox(height: 24),
                 if (itemInfo != null) ...[
-                  _buildInfoRow('Categoría:', itemInfo.category),
                   _buildInfoRow('Rareza:', itemInfo.rarity),
-                  _buildInfoRow('Precio Compra:', itemInfo.buyPrice),
-                  _buildInfoRow('Valor Venta:', itemInfo.sellValue),
-                  _buildInfoRow(
-                      'Comerciable:', itemInfo.tradeable ? 'Sí' : 'No'),
+                  if (itemInfo.price != "0")
+                    _buildInfoRow(
+                        'Precio:', '${itemInfo.price} ${itemInfo.currency}'),
                 ],
                 const SizedBox(height: 24),
                 CupertinoButton.filled(
                     child: const Text('Cerrar'),
-                    onPressed: () {
-                      debugPrint("[$methodName] Cerrando diálogo de detalles.");
-                      Navigator.of(ctx).pop();
-                    }),
+                    onPressed: () => Navigator.of(ctx).pop()),
               ],
             ),
           ),
@@ -101,13 +97,28 @@ class CategoryTabScreen extends StatelessWidget {
   }
 
   Widget _buildInfoRow(String label, String value) {
+    if (value.trim().isEmpty ||
+        value.contains('N/A') ||
+        value.toLowerCase() == 'null') {
+      return const SizedBox.shrink();
+    }
+
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4.0),
+      padding: const EdgeInsets.symmetric(vertical: 6.0),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
-          Text(value),
+          Text(label,
+              style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                  color: AppTheme.textColor.withOpacity(0.9))),
+          const SizedBox(width: 16),
+          Flexible(
+            child: Text(value,
+                textAlign: TextAlign.end,
+                style: const TextStyle(color: AppTheme.textColor)),
+          ),
         ],
       ),
     );
