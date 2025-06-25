@@ -33,6 +33,7 @@ dependencies:
   intl: ^0.20.2                   # Para formatear fechas y horas correctamente.
   shared_preferences: ^2.2.3   # Para guardar la lista de items del "Fruit Sniper".
   permission_handler: ^11.3.1 # Para solicitar permisos fácilmente
+  logger: ^2.4.0 # Para logging avanzado y estructurado
 
 dev_dependencies:
   flutter_test:

@@ -17,7 +17,7 @@ class _HeaderStatusViewState extends State<HeaderStatusView> {
   @override
   void initState() {
     super.initState();
-    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+    _timer = Timer.periodic(const Duration(seconds: 1), (timer) { // Duration puede ser const
       if (mounted) {
         setState(() {});
       }
@@ -33,9 +33,9 @@ class _HeaderStatusViewState extends State<HeaderStatusView> {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(12.0),
+      padding: const EdgeInsets.all(12.0), // Puede ser const
       width: double.infinity,
-      color: AppTheme.background.withOpacity(0.95),
+      color: AppTheme.background.withOpacity(0.95), // No puede ser const
       child: _buildTimers(),
     );
   }
@@ -44,8 +44,8 @@ class _HeaderStatusViewState extends State<HeaderStatusView> {
     // La lógica se simplifica: solo nos importa el estado 'StockActive'.
     if (widget.state is! StockActive) {
       // Si no estamos en estado activo, no mostramos nada o un indicador.
-      return const SizedBox(
-          height: 24, child: CupertinoActivityIndicator(radius: 8));
+      return const SizedBox( // Puede ser const
+          height: 24, child: CupertinoActivityIndicator(radius: 8)); // CupertinoActivityIndicator puede ser const
     }
 
     final currentState = widget.state as StockActive;
@@ -64,8 +64,8 @@ class _HeaderStatusViewState extends State<HeaderStatusView> {
     });
 
     if (activeTimers.isEmpty) {
-      return const Text("No hay restocks activos.",
-          style: TextStyle(fontSize: 12));
+      return const Text("No hay restocks activos.", // Puede ser const
+          style: TextStyle(fontSize: 12)); // Puede ser const
     }
 
     return Wrap(
@@ -80,12 +80,12 @@ class _HeaderStatusViewState extends State<HeaderStatusView> {
           children: [
             Text(label,
                 style:
-                    const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                    const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)), // Puede ser const
             Text(
               _formatDuration(entry.value),
-              style: const TextStyle(
+              style: const TextStyle( // Puede ser const
                   fontWeight: FontWeight.bold,
-                  color: AppTheme.primary,
+                  color: AppTheme.primary, // AppTheme.primary es probablemente const
                   fontSize: 14),
             ),
           ],

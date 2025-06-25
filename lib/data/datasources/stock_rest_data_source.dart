@@ -1,9 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
-import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../../core/api/api_constants.dart';
 import '../../core/error/exceptions.dart';
+import '../../core/utils/logger.dart'; // Importar logger
 
 abstract class StockRestDataSource {
   Future<Map<String, dynamic>> getStock();
@@ -27,7 +27,7 @@ class StockRestDataSourceImpl implements StockRestDataSource {
   Future<Map<String, dynamic>> getStock() async {
     final methodName = "$_className.getStock";
     final url = ApiConstants.baseUrl + ApiConstants.stockEndpoint;
-    debugPrint("[$methodName] Iniciando petición GET a: $url");
+    logD("[$methodName] Iniciando petición GET a: $url");
 
     try {
       // Se añade la cabecera a la petición y se aumenta el timeout a 30 segundos
@@ -35,22 +35,29 @@ class StockRestDataSourceImpl implements StockRestDataSource {
           .get(Uri.parse(url), headers: _headers)
           .timeout(const Duration(seconds: 30));
 
+      logD("[$methodName] Respuesta recibida con statusCode: ${response.statusCode}");
       if (response.statusCode == 200) {
-        debugPrint("[$methodName] Stock recibido con éxito (status 200).");
-        return json.decode(response.body);
+        logI("[$methodName] Stock recibido con éxito.");
+        return json.decode(response.body) as Map<String, dynamic>;
+      } else if (response.statusCode >= 400 && response.statusCode < 500) {
+        logW("[$methodName] Error del cliente (4xx) para Stock. StatusCode: ${response.statusCode}, Body: ${response.body}");
+        throw ServerException("Error del cliente al obtener stock: ${response.statusCode}");
       } else {
-        debugPrint(
-            "[$methodName] Error de servidor para Stock: ${response.statusCode}. Respuesta: ${response.body}");
-        throw ServerException();
+        logE("[$methodName] Error del servidor (5xx o inesperado) para Stock. StatusCode: ${response.statusCode}, Body: ${response.body}");
+        throw ServerException("Error del servidor al obtener stock: ${response.statusCode}");
       }
     } on TimeoutException catch (e, s) {
-      debugPrint(
-          "[$methodName] ERROR: TimeoutException al obtener Stock: $e\nStackTrace: $s");
-      throw ServerException();
+      logE("[$methodName] TimeoutException al obtener Stock", error: e, stackTrace: s);
+      throw NetworkException("Timeout al obtener stock. Verifica tu conexión.");
+    } on http.ClientException catch (e,s) {
+      logE("[$methodName] ClientException (probablemente de red) al obtener Stock", error: e, stackTrace: s);
+      throw NetworkException("Error de conexión al obtener stock: ${e.message}");
+    } on FormatException catch (e, s) {
+      logE("[$methodName] FormatException (error de parseo JSON) al obtener Stock", error: e, stackTrace: s);
+      throw ParsingException("Error al procesar la respuesta del stock.");
     } catch (e, s) {
-      debugPrint(
-          "[$methodName] ERROR: Excepción al obtener Stock: $e\nStackTrace: $s");
-      throw ServerException();
+      logE("[$methodName] Excepción no controlada al obtener Stock", error: e, stackTrace: s);
+      throw ServerException("Ocurrió un error inesperado al obtener stock: ${e.toString()}");
     }
   }
 
@@ -58,36 +65,42 @@ class StockRestDataSourceImpl implements StockRestDataSource {
   Future<List<dynamic>> getWeather() async {
     final methodName = "$_className.getWeather";
     final url = ApiConstants.baseUrl + ApiConstants.weatherEndpoint;
-    debugPrint("[$methodName] Haciendo petición GET a: $url");
+    logD("[$methodName] Haciendo petición GET a: $url");
 
     try {
-      // Se añade la cabecera a la petición y se aumenta el timeout a 30 segundos
       final response = await client
           .get(Uri.parse(url), headers: _headers)
           .timeout(const Duration(seconds: 30));
 
+      logD("[$methodName] Respuesta recibida con statusCode: ${response.statusCode}");
       if (response.statusCode == 200) {
         final decodedBody = json.decode(response.body);
-        if (decodedBody is Map && decodedBody.containsKey('weather')) {
-          return decodedBody['weather'];
+        if (decodedBody is Map && decodedBody.containsKey('weather') && decodedBody['weather'] is List) {
+          logI("[$methodName] Clima recibido con éxito.");
+          return decodedBody['weather'] as List<dynamic>;
         } else {
-          debugPrint(
-              "[$methodName] Respuesta de Clima inesperada. No contiene 'weather'. Body: ${response.body}");
-          throw ServerException();
+          logW("[$methodName] Respuesta de Clima inesperada. No contiene 'weather' o no es una lista. Body: ${response.body}");
+          throw ParsingException("Formato de respuesta de clima inesperado.");
         }
+      } else if (response.statusCode >= 400 && response.statusCode < 500) {
+        logW("[$methodName] Error del cliente (4xx) para Clima. StatusCode: ${response.statusCode}, Body: ${response.body}");
+        throw ServerException("Error del cliente al obtener clima: ${response.statusCode}");
       } else {
-        debugPrint(
-            "[$methodName] Error de servidor para Clima: ${response.statusCode}. Respuesta: ${response.body}");
-        throw ServerException();
+        logE("[$methodName] Error del servidor (5xx o inesperado) para Clima. StatusCode: ${response.statusCode}, Body: ${response.body}");
+        throw ServerException("Error del servidor al obtener clima: ${response.statusCode}");
       }
     } on TimeoutException catch (e, s) {
-      debugPrint(
-          "[$methodName] ERROR: TimeoutException al obtener Clima: $e\nStackTrace: $s");
-      throw ServerException();
+      logE("[$methodName] TimeoutException al obtener Clima", error: e, stackTrace: s);
+      throw NetworkException("Timeout al obtener clima. Verifica tu conexión.");
+    } on http.ClientException catch (e,s) {
+      logE("[$methodName] ClientException (probablemente de red) al obtener Clima", error: e, stackTrace: s);
+      throw NetworkException("Error de conexión al obtener clima: ${e.message}");
+    } on FormatException catch (e, s) {
+      logE("[$methodName] FormatException (error de parseo JSON) al obtener Clima", error: e, stackTrace: s);
+      throw ParsingException("Error al procesar la respuesta del clima.");
     } catch (e, s) {
-      debugPrint(
-          "[$methodName] ERROR: Excepción al obtener Clima: $e\nStackTrace: $s");
-      throw ServerException();
+      logE("[$methodName] Excepción no controlada al obtener Clima", error: e, stackTrace: s);
+      throw ServerException("Ocurrió un error inesperado al obtener clima: ${e.toString()}");
     }
   }
 }

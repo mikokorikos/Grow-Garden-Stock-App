@@ -10,15 +10,19 @@ import 'package:grow_garden_tracker/domain/entities/weather_entity.dart';
 import 'package:grow_garden_tracker/data/models/stock_item_model.dart';
 import 'package:grow_garden_tracker/data/models/weather_model.dart';
 import 'package:grow_garden_tracker/domain/usecases/get_all_items_info_usecase.dart';
+import 'package:grow_garden_tracker/core/error/exceptions.dart';
+import 'package:grow_garden_tracker/core/utils/logger.dart'; // Importar logger
 
 part 'stock_event.dart';
 part 'stock_state.dart';
 
 class StockBloc extends Bloc<StockEvent, StockState> {
   final GetAllItemsInfoUseCase _getAllItemsInfoUseCase;
+  final String _className = "StockBloc"; // Para logging
   StreamSubscription<Map<String, dynamic>?>? _stockSubscription;
   StreamSubscription<Map<String, dynamic>?>? _errorSubscription;
   StreamSubscription<Map<String, dynamic>?>? _alarmSubscription;
+  bool _isProcessingStockData = false; // Flag para evitar procesamiento concurrente
 
   StockBloc({
     required GetAllItemsInfoUseCase getAllItemsInfoUseCase,
@@ -33,6 +37,7 @@ class StockBloc extends Bloc<StockEvent, StockState> {
 
   // --- NUEVO MÉTODO PARA CANCELAR SUSCRIPCIONES ---
   void _cancelSubscriptions() {
+    logI("[$_className] Cancelando suscripciones...");
     _stockSubscription?.cancel();
     _errorSubscription?.cancel();
     _alarmSubscription?.cancel();
@@ -47,35 +52,89 @@ class StockBloc extends Bloc<StockEvent, StockState> {
   ) async {
     // Primero, cancela cualquier suscripción existente para empezar de cero.
     _cancelSubscriptions();
+    final methodName = "$_className._onListenToStockUpdates";
+    logI("[$methodName] Iniciando escucha de actualizaciones de stock...");
 
     emit(StockLoading());
     
     final service = FlutterBackgroundService();
     
-    _stockSubscription = service.on('updateStock').listen((event) async {
-      if (event != null) await _processServiceData(event);
-    });
-
-    _errorSubscription = service.on('persistent_error').listen((event) {
-       if (event != null && event['message'] != null) {
-         emit(StockError(event['message']));
-       }
-    });
-
-    _alarmSubscription = service.on('sniperAlarm').listen((event) {
-      if (event != null) {
-        final items = List<String>.from(event['items'] ?? []);
-        final colorHex = event['rarityColorHex'] as int?;
-        if (items.isNotEmpty && colorHex != null) {
-          emit(SniperAlarmTriggered(foundItems: items, rarityColor: Color(colorHex)));
+    // Suscripción a actualizaciones de stock
+    _stockSubscription = service.on('updateStock').listen(
+      (eventData) async {
+        if (_isProcessingStockData) {
+          logW("[$methodName] Stock data processing already in progress, skipping new 'updateStock' event.");
+          return;
         }
+        _isProcessingStockData = true;
+        try {
+          if (eventData != null) {
+            logD("[$methodName] Datos de 'updateStock' recibidos del servicio: $eventData");
+            await _processServiceData(eventData, emit);
+          } else {
+            logW("[$methodName] Evento 'updateStock' nulo recibido.");
+          }
+        } finally {
+          _isProcessingStockData = false;
+        }
+      },
+      onError: (error, stackTrace) {
+        _isProcessingStockData = false; // Asegurar que el flag se resetea en caso de error en el stream
+        logE("[$methodName] ERROR en stream 'updateStock'", error: error, stackTrace: stackTrace);
+        emit(StockError("Error en la comunicación con el servicio de fondo (stock): ${error.toString()}"));
       }
-    });
+    );
 
-    if (await service.isRunning()) {
-      service.invoke('requestInitialData');
-    } else {
-      emit(StockServiceInactive());
+    // Suscripción a errores persistentes del servicio
+    _errorSubscription = service.on('persistent_error').listen(
+      (eventData) { // Renombrado event a eventData
+       if (eventData != null && eventData['message'] != null) {
+         logW("[$methodName] 'persistent_error' recibido: ${eventData['message']}");
+         emit(StockError(eventData['message']));
+       } else {
+         logW("[$methodName] Evento 'persistent_error' nulo o sin mensaje.");
+       }
+      },
+      onError: (error, stackTrace) {
+        logE("[$methodName] ERROR en stream 'persistent_error'", error: error, stackTrace: stackTrace);
+        emit(StockError("Error en la comunicación con el servicio de fondo (errores): ${error.toString()}"));
+      }
+    );
+
+    // Suscripción a alarmas de sniper
+    _alarmSubscription = service.on('sniperAlarm').listen(
+      (eventData) { // Renombrado event a eventData
+      if (eventData != null) {
+        final items = List<String>.from(eventData['items'] ?? []);
+        final colorHex = eventData['rarityColorHex'] as int?;
+        if (items.isNotEmpty && colorHex != null) {
+          logI("[$methodName] 'sniperAlarm' recibido para items: $items");
+          emit(SniperAlarmTriggered(foundItems: items, rarityColor: Color(colorHex)));
+        } else {
+          logW("[$methodName] Evento 'sniperAlarm' incompleto: items o colorHex faltantes. Data: $eventData");
+        }
+      } else {
+        logW("[$methodName] Evento 'sniperAlarm' nulo recibido.");
+      }
+      },
+      onError: (error, stackTrace) {
+        logE("[$methodName] ERROR en stream 'sniperAlarm'", error: error, stackTrace: stackTrace);
+        emit(StockError("Error en la comunicación con el servicio de fondo (alarma): ${error.toString()}"));
+      }
+    );
+
+    // Solicitar datos iniciales si el servicio está corriendo
+    try {
+      if (await service.isRunning()) {
+        logI("[$methodName] El servicio está corriendo. Solicitando datos iniciales...");
+        service.invoke('requestInitialData');
+      } else {
+        logW("[$methodName] El servicio no está corriendo. Emitiendo StockServiceInactive.");
+        emit(StockServiceInactive());
+      }
+    } catch (e, s) {
+        logE("[$methodName] ERROR al verificar el estado del servicio o al invocar 'requestInitialData'", error: e, stackTrace: s);
+        emit(StockError("No se pudo comunicar con el servicio de fondo: ${e.toString()}"));
     }
   }
 
@@ -84,28 +143,50 @@ class StockBloc extends Bloc<StockEvent, StockState> {
     StopListeningToStockUpdates event,
     Emitter<StockState> emit,
   ) {
+    final methodName = "$_className._onStopListeningToStockUpdates";
+    logI("[$methodName] Deteniendo escucha de actualizaciones de stock.");
     _cancelSubscriptions();
-    emit(StockServiceInactive());
+    emit(StockServiceInactive()); // O quizás StockInitial() si es más apropiado
   }
 
-  Future<void> _processServiceData(Map<String, dynamic> event) async {
+  Future<void> _processServiceData(Map<String, dynamic> eventData, Emitter<StockState> emit) async { // Renombrado event a eventData
+    final methodName = "$_className._processServiceData";
+    logD("[$methodName] Procesando datos recibidos del servicio: $eventData");
     try {
-      final rawStock = Map<String, dynamic>.from(event['stock'] ?? {});
-      final rawWeather = List<dynamic>.from(event['weather'] ?? []);
+      final rawStock = Map<String, dynamic>.from(eventData['stock'] ?? {});
+      final rawWeather = List<dynamic>.from(eventData['weather'] ?? []);
       
       final stockData = <String, List<StockItemEntity>>{};
       rawStock.forEach((key, value) {
         if (value is List) {
-          stockData[key] = value.map((item) => StockItemModel.fromJson(Map<String,dynamic>.from(item))).toList();
+          try {
+            stockData[key] = value.map((item) => StockItemModel.fromJson(Map<String,dynamic>.from(item))).toList();
+          } catch (e,s) {
+            logE("[$methodName] ERROR al parsear un item de stock en la categoría '$key'. Item: $value", error: e, stackTrace: s);
+          }
         }
       });
 
-      final weatherData = rawWeather.map((item) => WeatherModel.fromJson(Map<String,dynamic>.from(item))).toList();
-      final itemDetails = await _getAllItemsInfoUseCase();
+      final weatherData = <WeatherEntity>[];
+      for (var item in rawWeather) {
+        try {
+          weatherData.add(WeatherModel.fromJson(Map<String,dynamic>.from(item)));
+        } catch (e,s) {
+          logE("[$methodName] ERROR al parsear un item de clima. Item: $item", error: e, stackTrace: s);
+        }
+      }
 
-      add(_StockDataReceived(stockData: stockData, weather: weatherData, itemDetails: itemDetails));
-    } catch (e) {
-      add(_StockProcessingFailed("Error al procesar los datos del stock: $e"));
+      logD("[$methodName] Obteniendo detalles de items...");
+      final itemDetails = await _getAllItemsInfoUseCase();
+      logI("[$methodName] Detalles de items obtenidos. Emitiendo _StockDataReceived.");
+      _onStockDataReceived(_StockDataReceived(stockData: stockData, weather: weatherData, itemDetails: itemDetails), emit);
+
+    } on AppException catch (e, s) {
+      logE("[$methodName] AppException durante el procesamiento de datos o llamada a use case: ${e.message}", error: e, stackTrace: s);
+      emit(StockError(e.toString()));
+    } catch (e, s) {
+      logE("[$methodName] Excepción genérica durante el procesamiento de datos", error: e, stackTrace: s);
+      emit(StockError("Error interno al procesar datos del stock: ${e.toString()}"));
     }
   }
 
