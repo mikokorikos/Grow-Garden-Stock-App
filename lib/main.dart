@@ -1,10 +1,11 @@
 import 'package:flutter/cupertino.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:http/http.dart' as http;
+import 'dart:async'; // Para StreamSubscription
+import 'dart:convert'; // Para jsonDecode
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:http/http.dart' as http;
 import 'package:grow_garden_tracker/core/background/background_service_handler.dart';
 import 'package:grow_garden_tracker/core/database/sniper_repository.dart';
+import 'package:grow_garden_tracker/core/services/navigation_event_service.dart'; // Importar
 import 'package:grow_garden_tracker/core/services/notification_service.dart';
 import 'package:grow_garden_tracker/core/services/ringtone_service.dart';
 import 'package:grow_garden_tracker/data/repositories/item_info_repository_impl.dart';
@@ -52,7 +53,7 @@ Future<void> main() async {
   ));
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends StatefulWidget { // Convertido a StatefulWidget
   final StockBloc stockBloc;
   final SniperBloc sniperBloc;
 
@@ -63,50 +64,133 @@ class MyApp extends StatelessWidget {
   });
 
   @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  StreamSubscription? _navSubscription;
+  // GlobalKey para acceder al NavigatorState, necesario para mostrar diálogos/rutas
+  // desde fuera del contexto de un widget específico que tenga acceso a Navigator.of(context)
+  final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+
+  @override
+  void initState() {
+    super.initState();
+    _navSubscription = NavigationEventService().navStream.listen((event) {
+      if (event.type == NavigationEventType.showSniperAlarm) {
+        // Usar el navigatorKey para obtener un contexto que pueda mostrar el diálogo
+        final context = navigatorKey.currentContext;
+        if (context != null) {
+          _showSniperAlarm(context, event.data);
+        } else {
+          logW("[MyAppState] navigatorKey.currentContext es nulo. No se puede mostrar la alarma de sniper.");
+        }
+      }
+    });
+  }
+
+  void _showSniperAlarm(BuildContext context, dynamic eventData) {
+      List<String> foundItems = ["Item Desconocido"];
+      Color rarityColor = CupertinoColors.systemRed; // Color por defecto
+
+      if (eventData is Map) {
+        final dataMap = eventData;
+        if (dataMap['type'] == 'sniper_alarm_legacy') {
+            // Manejo del payload legacy
+            foundItems = [dataMap['message']?.toString() ?? "¡Alarma!"];
+        } else {
+            // Nuevo formato de payload
+            if (dataMap.containsKey('items') && dataMap['items'] is List) {
+              foundItems = List<String>.from(dataMap['items']);
+            } else if (dataMap.containsKey('items') && dataMap['items'] is String) {
+              // Si 'items' es un JSON string de una lista
+              try {
+                foundItems = List<String>.from(jsonDecode(dataMap['items']));
+              } catch(e) {
+                logE("Error decodificando items del payload: $e");
+                foundItems = [dataMap['items']]; //Fallback a tomarlo como string simple
+              }
+            }
+            if (dataMap.containsKey('rarityColorHex') && dataMap['rarityColorHex'] is String) {
+               try {
+                rarityColor = Color(int.parse(dataMap['rarityColorHex']));
+               } catch(e) {
+                logE("Error parseando rarityColorHex del payload: $e");
+               }
+            } else if (dataMap.containsKey('rarityColorHex') && dataMap['rarityColorHex'] is int) {
+                rarityColor = Color(dataMap['rarityColorHex']);
+            }
+        }
+      } else if (eventData is String) { // Por si acaso se envía solo un string
+        foundItems = [eventData];
+      }
+
+
+      logI("[MyAppState] Evento showSniperAlarm recibido. Mostrando diálogo. Items: $foundItems");
+      ringtoneService.stop();
+      ringtoneService.play();
+
+      notificationService.showSniperAlarmNotification(
+        'Sniper Alarm!',
+        'Found: ${foundItems.join(', ')}',
+        // Re-construir payload para la notificación si es necesario, o dejarlo vacío
+        // si la notificación es solo para el fullScreenIntent y la data ya está en la app.
+        payloadData: eventData is Map ? eventData : {'type': 'sniper_alarm_simple', 'items': jsonEncode(foundItems)},
+      );
+
+      showCupertinoDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => SniperAlarmDialog(
+          foundItems: foundItems,
+          rarityColor: rarityColor,
+        ),
+      ).whenComplete(() {
+        logD("[MyAppState] Diálogo de alarma (desde NavEvent) cerrado.");
+        ringtoneService.stop();
+        notificationService.cancelSniperAlarmNotification(); // Cancelar la notificación que podría estar activa
+      });
+  }
+
+  @override
+  void dispose() {
+    _navSubscription?.cancel();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return MultiBlocProvider(
       providers: [
-        BlocProvider.value(value: stockBloc..add(ListenToStockUpdates())),
-        BlocProvider.value(value: sniperBloc..add(LoadSniperData())),
+        BlocProvider.value(value: widget.stockBloc..add(ListenToStockUpdates())),
+        BlocProvider.value(value: widget.sniperBloc..add(LoadSniperData())),
       ],
       child: BlocListener<StockBloc, StockState>(
+        bloc: widget.stockBloc,
         listener: (context, state) {
           if (state is SniperAlarmTriggered) {
-            logI("[MyApp] SniperAlarmTriggered recibido en BlocListener. Items: ${state.foundItems}, Color: ${state.rarityColor}");
-            ringtoneService.stop(); // Detiene cualquier sonido anterior para reiniciar el bucle.
-            ringtoneService.play();
-
-            final String itemsFoundString = state.foundItems.join(', ');
-            logD("[MyApp] Mostrando notificación local para alarma de sniper.");
-            notificationService.showSniperAlarmNotification(
-              'Sniper Alarm!',
-              'Found: $itemsFoundString',
+            logI("[MyAppState] SniperAlarmTriggered (desde StockBloc) recibido. Items: ${state.foundItems}");
+            // Disparar evento de navegación para centralizar la lógica de mostrar la alarma
+            NavigationEventService().fireEvent(
+              NavigationEventType.showSniperAlarm,
+              data: {
+                'type': 'sniper_alarm', // Tipo específico para distinguir del payload de notificación simple
+                'items': state.foundItems,
+                'rarityColorHex': state.rarityColor.value.toString(),
+              }
             );
-
-            showCupertinoDialog(
-              context: context,
-              barrierDismissible: false,
-              builder: (_) => SniperAlarmDialog(
-                foundItems: state.foundItems,
-                rarityColor: state.rarityColor,
-              ),
-            ).whenComplete(() {
-              logD("[MyApp] Diálogo de alarma de sniper cerrado. Deteniendo tono y cancelando notificación.");
-              ringtoneService.stop();
-              notificationService.cancelSniperAlarmNotification();
-            });
           } else if (state is StockError) {
-            // Ejemplo de cómo podríamos loguear otros estados importantes o errores
-            logE("[MyApp] StockError recibido en BlocListener: ${state.message}");
-            // Aquí podríamos mostrar un Toast/Snackbar si quisiéramos, además del log.
-            // Fluttertoast.showToast(msg: "Error: ${state.message}");
+            logE("[MyAppState] StockError recibido en BlocListener: ${state.message}");
+            // Considerar mostrar un Toast o SnackBar aquí para errores generales de stock
+            // Ejemplo: Fluttertoast.showToast(msg: "Error de Stock: ${state.message}");
           }
         },
-        child: const CupertinoApp(
+        child: CupertinoApp(
+          navigatorKey: navigatorKey, // Asignar el GlobalKey al CupertinoApp
           title: 'Grow a Garden Tracker',
           theme: AppTheme.cupertinoTheme,
           debugShowCheckedModeBanner: false,
-          home: HomeScreen(),
+          home: const HomeScreen(),
         ),
       ),
     );

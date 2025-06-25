@@ -1,6 +1,8 @@
+import 'dart:convert'; // Para jsonEncode/Decode
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:grow_garden_tracker/core/services/ringtone_service.dart';
-import 'package:grow_garden_tracker/core/utils/logger.dart'; // Importar logger
+import 'package:grow_garden_tracker/core/utils/logger.dart';
+import 'navigation_event_service.dart'; // Importar el nuevo servicio
 
 // Hacemos la instancia del RingtoneService accesible globalmente o la pasamos por DI.
 // Por simplicidad momentánea y para mantener la funcionalidad original, la instanciamos aquí.
@@ -26,21 +28,50 @@ class NotificationService {
     await _flutterLocalNotificationsPlugin.initialize(
       initializationSettings,
       onDidReceiveNotificationResponse: _onDidReceiveNotificationResponse,
+      // Callback para cuando la app está en background/terminada y se recibe una notificación
+      // Esto es crucial para que el fullScreenIntent funcione correctamente si la app no está activa
+      onDidReceiveBackgroundNotificationResponse: _onDidReceiveBackgroundNotificationResponse,
     );
   }
 
   // Wrapper para mostrar una notificación de alarma de sniper
-  Future<void> showSniperAlarmNotification(String title, String body) async {
-    const AndroidNotificationDetails androidPlatformChannelSpecifics =
+  Future<void> showSniperAlarmNotification(String title, String body, {Map<String, dynamic>? payloadData}) async {
+    // Ahora payloadData es Map<String, dynamic> para más flexibilidad
+    final String notificationPayload = payloadData != null ? jsonEncode(payloadData) : jsonEncode({'type': 'sniper_alarm_simple'});
+
+
+    // Configuración específica para Android
+    // Nota: `fullScreenIntent` requiere el permiso USE_FULL_SCREEN_INTENT en AndroidManifest.xml
+    // También, la actividad que se lanza (normalmente MainActivity) debe estar configurada
+    // para manejar este intent, posiblemente en `android:launchMode="singleTop"` o similar
+    // y extraer el payload en `onResume` o `onNewIntent`.
+    final AndroidNotificationDetails androidPlatformChannelSpecifics =
         AndroidNotificationDetails(
       sniperAlarmChannelId,
       sniperAlarmChannelName,
       channelDescription: sniperAlarmChannelDescription,
-      importance: Importance.max,
-      priority: Priority.high,
+      importance: Importance.max, // MAX Importance para notificaciones heads-up
+      priority: Priority.high,    // HIGH Priority
       showWhen: true,
-      playSound: false, // El sonido se maneja por RingtoneService
+      playSound: false, // El sonido se maneja por RingtoneService manualmente
+      fullScreenIntent: true, // ¡CLAVE PARA LA ALARMA DE PANTALLA COMPLETA!
+      // `categoryAlarm` puede ayudar al sistema a tratarla como una alarma
+      category: AndroidNotificationCategory.alarm,
+      // `visibilityPublic` para que se muestre en la pantalla de bloqueo
+      visibility: NotificationVisibility.public,
+      // Podríamos añadir un sonido custom aquí si no usáramos RingtoneService
+      // sound: RawResourceAndroidNotificationSound('alarm_sound'), // si tuvieras res/raw/alarm_sound.mp3
+      // Podríamos configurar vibración también
+      // enableVibration: true,
+      // VIBRATION PATTERN (ejemplo: espera 0ms, vibra 500ms, espera 500ms, vibra 500ms)
+      // vibrationPattern: Int64List.fromList([0, 500, 500, 500]),
+      // Para luces LED si el dispositivo lo soporta
+      // enableLights: true,
+      // ledColor: const Color.fromARGB(255, 255, 0, 0), // Rojo
+      // ledOnMs: 1000,
+      // ledOffMs: 500,
     );
+
     const NotificationDetails platformChannelSpecifics =
         NotificationDetails(android: androidPlatformChannelSpecifics);
 
