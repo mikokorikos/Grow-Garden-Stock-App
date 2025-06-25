@@ -78,12 +78,19 @@ class _MyAppState extends State<MyApp> {
     super.initState();
     _navSubscription = NavigationEventService().navStream.listen((event) {
       if (event.type == NavigationEventType.showSniperAlarm) {
-        // Usar el navigatorKey para obtener un contexto que pueda mostrar el diálogo
+        // Guard against calls after widget disposal or before context is available.
+        if (!mounted) return;
         final context = navigatorKey.currentContext;
         if (context != null) {
           _showSniperAlarm(context, event.data);
         } else {
           logW("[MyAppState] navigatorKey.currentContext es nulo. No se puede mostrar la alarma de sniper.");
+          // Podríamos intentar con un pequeño delay si el contexto no está listo inmediatamente
+          // Future.delayed(Duration(milliseconds: 100), () {
+          //   if (!mounted) return;
+          //   final delayedContext = navigatorKey.currentContext;
+          //   if (delayedContext != null) _showSniperAlarm(delayedContext, event.data);
+          // });
         }
       }
     });
@@ -94,48 +101,74 @@ class _MyAppState extends State<MyApp> {
       Color rarityColor = CupertinoColors.systemRed; // Color por defecto
 
       if (eventData is Map) {
-        final dataMap = eventData;
+        // Asegurar que el mapa sea Map<String, dynamic> para el payload
+        final Map<String, dynamic> dataMap = Map<String, dynamic>.from(eventData);
+
         if (dataMap['type'] == 'sniper_alarm_legacy') {
-            // Manejo del payload legacy
             foundItems = [dataMap['message']?.toString() ?? "¡Alarma!"];
         } else {
-            // Nuevo formato de payload
-            if (dataMap.containsKey('items') && dataMap['items'] is List) {
-              foundItems = List<String>.from(dataMap['items']);
-            } else if (dataMap.containsKey('items') && dataMap['items'] is String) {
-              // Si 'items' es un JSON string de una lista
+            dynamic itemsData = dataMap['items'];
+            if (itemsData is List) {
+              // Si ya es una lista de strings (o puede ser casteada)
               try {
-                foundItems = List<String>.from(jsonDecode(dataMap['items']));
+                foundItems = List<String>.from(itemsData.map((item) => item.toString()));
+              } catch (e) {
+                 logE("Error convirtiendo lista de items a List<String>: $e");
+              }
+            } else if (itemsData is String) {
+              try {
+                // Intenta decodificar si es un JSON string de una lista
+                final decodedList = jsonDecode(itemsData);
+                if (decodedList is List) {
+                   foundItems = List<String>.from(decodedList.map((item) => item.toString()));
+                } else {
+                  foundItems = [itemsData]; //Fallback a tomarlo como string simple
+                }
               } catch(e) {
-                logE("Error decodificando items del payload: $e");
-                foundItems = [dataMap['items']]; //Fallback a tomarlo como string simple
+                logW("Items no era un JSON string de lista, tratándolo como string simple: $itemsData. Error: $e");
+                foundItems = [itemsData];
               }
             }
-            if (dataMap.containsKey('rarityColorHex') && dataMap['rarityColorHex'] is String) {
+
+            dynamic colorData = dataMap['rarityColorHex'];
+            if (colorData is String) {
                try {
-                rarityColor = Color(int.parse(dataMap['rarityColorHex']));
+                rarityColor = Color(int.parse(colorData));
                } catch(e) {
-                logE("Error parseando rarityColorHex del payload: $e");
+                logE("Error parseando rarityColorHex (String) del payload: $colorData. Error: $e");
                }
-            } else if (dataMap.containsKey('rarityColorHex') && dataMap['rarityColorHex'] is int) {
-                rarityColor = Color(dataMap['rarityColorHex']);
+            } else if (colorData is int) {
+                rarityColor = Color(colorData);
             }
         }
-      } else if (eventData is String) { // Por si acaso se envía solo un string
+      } else if (eventData is String) {
         foundItems = [eventData];
       }
 
-
-      logI("[MyAppState] Evento showSniperAlarm recibido. Mostrando diálogo. Items: $foundItems");
+      logI("[MyAppState] Evento showSniperAlarm recibido. Mostrando diálogo. Items: $foundItems, Color: $rarityColor");
       ringtoneService.stop();
       ringtoneService.play();
+
+      // La notificación que se muestra aquí es principalmente para el caso en que la app ya esté en primer plano
+      // y queramos que la notificación aparezca como una "heads-up" normal además del diálogo.
+      // Si el fullScreenIntent ya trajo la app al frente, esta notificación podría ser redundante
+      // o incluso no mostrarse dependiendo de la configuración de Android.
+      // El payload aquí debe ser el mismo que se espera en _handleNotificationPayload
+      Map<String, dynamic> currentPayloadForNotification;
+      if (eventData is Map) {
+        currentPayloadForNotification = Map<String, dynamic>.from(eventData);
+      } else {
+        currentPayloadForNotification = {'type': 'sniper_alarm_simple', 'items': jsonEncode(foundItems)};
+      }
+      // Aseguramos que el payload tenga los datos que _handleNotificationPayload espera
+      currentPayloadForNotification['items'] = foundItems; // Asegurar que items sea List<String>
+      currentPayloadForNotification['rarityColorHex'] = rarityColor.value;
+
 
       notificationService.showSniperAlarmNotification(
         'Sniper Alarm!',
         'Found: ${foundItems.join(', ')}',
-        // Re-construir payload para la notificación si es necesario, o dejarlo vacío
-        // si la notificación es solo para el fullScreenIntent y la data ya está en la app.
-        payloadData: eventData is Map ? eventData : {'type': 'sniper_alarm_simple', 'items': jsonEncode(foundItems)},
+        payloadData: currentPayloadForNotification,
       );
 
       showCupertinoDialog(

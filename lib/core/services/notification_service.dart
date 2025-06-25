@@ -10,77 +10,64 @@ import 'navigation_event_service.dart'; // Importar el nuevo servicio
 // o usar un localizador de servicios.
 final RingtoneService _ringtoneService = RingtoneService();
 
+// Constantes del canal de notificación (top-level para asegurar que sean const en tiempo de compilación)
+const String _sniperAlarmChannelId = 'sniper_alarm_channel';
+const String _sniperAlarmChannelName = 'Sniper Alarms';
+const String _sniperAlarmChannelDescription = 'Notifications for sniper alarms';
 
 class NotificationService {
   final FlutterLocalNotificationsPlugin _flutterLocalNotificationsPlugin =
       FlutterLocalNotificationsPlugin();
 
-  static const String sniperAlarmChannelId = 'sniper_alarm_channel';
-  static const String sniperAlarmChannelName = 'Sniper Alarms';
-  static const String sniperAlarmChannelDescription = 'Notifications for sniper alarms';
+  // Ya no son static const aquí, se usan las top-level
+  // static const String sniperAlarmChannelId = 'sniper_alarm_channel';
+  // static const String sniperAlarmChannelName = 'Sniper Alarms';
+  // static const String sniperAlarmChannelDescription = 'Notifications for sniper alarms';
 
   Future<void> initialize() async {
     const AndroidInitializationSettings initializationSettingsAndroid =
-        AndroidInitializationSettings('@mipmap/ic_launcher');
+        AndroidInitializationSettings('@mipmap/ic_launcher'); // Asegúrate que '@mipmap/ic_launcher' es correcto y existe
     const InitializationSettings initializationSettings =
         InitializationSettings(android: initializationSettingsAndroid);
 
     await _flutterLocalNotificationsPlugin.initialize(
       initializationSettings,
       onDidReceiveNotificationResponse: _onDidReceiveNotificationResponse,
-      // Callback para cuando la app está en background/terminada y se recibe una notificación
-      // Esto es crucial para que el fullScreenIntent funcione correctamente si la app no está activa
-      onDidReceiveBackgroundNotificationResponse: _onDidReceiveBackgroundNotificationResponse,
+      onDidReceiveBackgroundNotificationResponse: _onDidReceiveBackgroundNotificationResponseHandler, // Nombre corregido
     );
   }
 
-  // Wrapper para mostrar una notificación de alarma de sniper
   Future<void> showSniperAlarmNotification(String title, String body, {Map<String, dynamic>? payloadData}) async {
-    // Ahora payloadData es Map<String, dynamic> para más flexibilidad
     final String notificationPayload = payloadData != null ? jsonEncode(payloadData) : jsonEncode({'type': 'sniper_alarm_simple'});
 
-
-    // Configuración específica para Android
-    // Nota: `fullScreenIntent` requiere el permiso USE_FULL_SCREEN_INTENT en AndroidManifest.xml
-    // También, la actividad que se lanza (normalmente MainActivity) debe estar configurada
-    // para manejar este intent, posiblemente en `android:launchMode="singleTop"` o similar
-    // y extraer el payload en `onResume` o `onNewIntent`.
-    final AndroidNotificationDetails androidPlatformChannelSpecifics =
+    const AndroidNotificationDetails androidPlatformChannelSpecifics =
         AndroidNotificationDetails(
-      sniperAlarmChannelId,
-      sniperAlarmChannelName,
-      channelDescription: sniperAlarmChannelDescription,
-      importance: Importance.max, // MAX Importance para notificaciones heads-up
-      priority: Priority.high,    // HIGH Priority
+      _sniperAlarmChannelId, // Usar las constantes top-level
+      _sniperAlarmChannelName,
+      channelDescription: _sniperAlarmChannelDescription,
+      importance: Importance.max,
+      priority: Priority.high,
       showWhen: true,
-      playSound: false, // El sonido se maneja por RingtoneService manualmente
-      fullScreenIntent: true, // ¡CLAVE PARA LA ALARMA DE PANTALLA COMPLETA!
-      // `categoryAlarm` puede ayudar al sistema a tratarla como una alarma
+      playSound: false,
+      fullScreenIntent: true,
       category: AndroidNotificationCategory.alarm,
-      // `visibilityPublic` para que se muestre en la pantalla de bloqueo
       visibility: NotificationVisibility.public,
-      // Podríamos añadir un sonido custom aquí si no usáramos RingtoneService
-      // sound: RawResourceAndroidNotificationSound('alarm_sound'), // si tuvieras res/raw/alarm_sound.mp3
-      // Podríamos configurar vibración también
-      // enableVibration: true,
-      // VIBRATION PATTERN (ejemplo: espera 0ms, vibra 500ms, espera 500ms, vibra 500ms)
+      // Las siguientes propiedades comentadas no son const, por lo que no se pueden usar en un const constructor
+      // si se descomentan, androidPlatformChannelSpecifics no podría ser const.
+      // sound: RawResourceAndroidNotificationSound('alarm_sound'),
       // vibrationPattern: Int64List.fromList([0, 500, 500, 500]),
-      // Para luces LED si el dispositivo lo soporta
-      // enableLights: true,
-      // ledColor: const Color.fromARGB(255, 255, 0, 0), // Rojo
-      // ledOnMs: 1000,
-      // ledOffMs: 500,
+      // ledColor: Color.fromARGB(255, 255, 0, 0),
     );
 
     const NotificationDetails platformChannelSpecifics =
         NotificationDetails(android: androidPlatformChannelSpecifics);
 
     await _flutterLocalNotificationsPlugin.show(
-      999, // ID de la notificación para la alarma (para poder cancelarla)
+      999,
       title,
       body,
       platformChannelSpecifics,
-      payload: 'sniper_alarm_payload',
+      payload: notificationPayload, // Usar el payload dinámico
     );
   }
 
@@ -89,14 +76,51 @@ class NotificationService {
   }
 }
 
-// Esta función necesita ser top-level o static para ser usada como callback.
-// Por eso se mantiene fuera de la clase o se hace static.
-Future<void> _onDidReceiveNotificationResponse(
-    NotificationResponse notificationResponse) async {
-  final String? payload = notificationResponse.payload;
-  logD("NotificationService: _onDidReceiveNotificationResponse triggered with payload: $payload");
-  if (payload == 'sniper_alarm_payload') {
-    logI('NotificationService: Alarma de sniper descartada por el usuario desde la notificación.');
-    _ringtoneService.stop();
+// Definición de la función top-level para el callback de background
+@pragma('vm:entry-point')
+void _onDidReceiveBackgroundNotificationResponseHandler(NotificationResponse notificationResponse) {
+  // Este es el wrapper que se pasa a initialize.
+  // Mantenlo simple: imprime o realiza tareas muy básicas de almacenamiento.
+  // No intentes actualizar la UI o usar plugins complejos aquí.
+  // NOTA: El logger global puede no estar inicializado en este isolate. Usar print.
+  print("NotificationService (Background): _onDidReceiveBackgroundNotificationResponseHandler triggered with payload: ${notificationResponse.payload}");
+  // No llamar a _handleNotificationPayload desde aquí directamente si implica lógica compleja o NavigationEventService.
+  // El fullScreenIntent debería ser suficiente para traer la app al frente, y luego
+  // onDidReceiveNotificationResponse o la lógica de intent de MainActivity se encargarán.
+}
+
+// Callback para cuando se interactúa con la notificación y la app está en primer plano.
+Future<void> _onDidReceiveNotificationResponse(NotificationResponse notificationResponse) async {
+  logD("NotificationService: _onDidReceiveNotificationResponse triggered with payload: ${notificationResponse.payload}");
+  _handleNotificationPayload(notificationResponse.payload);
+}
+
+// Lógica centralizada para manejar el payload (llamada desde el isolate principal)
+void _handleNotificationPayload(String? payloadString) {
+  if (payloadString == null) {
+    logW("NotificationService: Payload nulo recibido.");
+    return;
+  }
+
+  try {
+    final Map<String, dynamic> payloadMap = jsonDecode(payloadString);
+    final type = payloadMap['type'];
+
+    if (type == 'sniper_alarm' || type == 'sniper_alarm_simple' || type == 'sniper_alarm_legacy') {
+      logI('NotificationService: Alarma de sniper recibida (type: $type).');
+      _ringtoneService.stop();
+      NavigationEventService().fireEvent(NavigationEventType.showSniperAlarm, data: payloadMap);
+    } else {
+      logW("NotificationService: Tipo de payload desconocido: $type. Payload: $payloadString");
+    }
+  } catch (e) {
+    logE("NotificationService: Error decodificando payload JSON '$payloadString'. Error: $e");
+    // Si el payload no es JSON pero es el string que usábamos antes
+    if (payloadString == 'sniper_alarm_payload') { // Este era el payload original
+       logI('NotificationService: Alarma de sniper (payload string original) recibida.');
+      _ringtoneService.stop();
+      // Disparamos con un mapa que simula el tipo para que _MyAppState lo maneje
+      NavigationEventService().fireEvent(NavigationEventType.showSniperAlarm, data: {'type': 'sniper_alarm_legacy', 'message': 'Sniper Alarm!'});
+    }
   }
 }
