@@ -21,8 +21,7 @@ const _notificationId = 888;
 const _alarmChannelId = 'sniper_alarm_channel';
 const _alarmNotificationId = 999;
 
-final FlutterLocalNotificationsPlugin _notificationsPlugin =
-    FlutterLocalNotificationsPlugin();
+final FlutterLocalNotificationsPlugin _notificationsPlugin = FlutterLocalNotificationsPlugin();
 String _lastNotificationBody = '';
 
 @pragma('vm:entry-point')
@@ -69,8 +68,7 @@ class ServiceLogic {
 
   void updateSniperList(List<String> list) {
     _sniperList = list;
-    debugPrint(
-        '[ServiceLogic] Sniper list updated. Forcing notification refresh.');
+    debugPrint('[ServiceLogic] Sniper list updated. Forcing notification refresh.');
     if (_lastKnownStock != null && _lastKnownWeather != null) {
       _updateDynamicNotification(
         nextStockTime: _nextStockTime,
@@ -94,11 +92,9 @@ class ServiceLogic {
   Future<void> start(ServiceInstance service) async {
     _isStopped = false;
     try {
-      debugPrint(
-          '[ServiceLogic] Loading sniper list from storage on startup...');
+      debugPrint('[ServiceLogic] Loading sniper list from storage on startup...');
       _sniperList = await SniperRepository().loadSniperList();
-      debugPrint(
-          '[ServiceLogic] Sniper list loaded with ${_sniperList.length} items.');
+      debugPrint('[ServiceLogic] Sniper list loaded with ${_sniperList.length} items.');
     } catch (e) {
       debugPrint('[ServiceLogic] Could not load sniper list on startup: $e');
     }
@@ -128,8 +124,7 @@ class ServiceLogic {
     String title;
     if (_nextStockTime!.isAfter(DateTime.now())) {
       final remaining = _nextStockTime!.difference(DateTime.now());
-      title =
-          'Próximo Stock en: ${_formatRemainingTime(remaining)} (a las ${_formatTime(_nextStockTime!)})';
+      title = 'Próximo Stock en: ${_formatRemainingTime(remaining)} (a las ${_formatTime(_nextStockTime!)})';
     } else {
       title = 'Buscando nuevo stock...';
     }
@@ -140,27 +135,23 @@ class ServiceLogic {
     if (_isStopped) return;
     Duration nextDelay;
     try {
-      final results = await Future.wait(
-          [stockDataSource.getStock(), stockDataSource.getWeather()]);
+      final results = await Future.wait([stockDataSource.getStock(), stockDataSource.getWeather()]);
       final newStockMap = results[0] as Map<String, dynamic>;
       final newWeather = results[1] as List<dynamic>;
       final parsedStock = _parseStock(newStockMap);
-      final stockChanged =
-          !const DeepCollectionEquality().equals(_lastKnownStock, newStockMap);
+      final stockChanged = !const DeepCollectionEquality().equals(_lastKnownStock, newStockMap);
       if (stockChanged) {
         debugPrint('[ServiceLogic] ¡Cambio de stock detectado!');
         _lastKnownStock = newStockMap;
         _lastKnownWeather = newWeather;
-        service.invoke(
-            'updateStock', {'stock': newStockMap, 'weather': newWeather});
+        service.invoke('updateStock', {'stock': newStockMap, 'weather': newWeather});
       }
       final foundSniperItems = _checkForSniperItems(parsedStock, _sniperList);
       if (foundSniperItems.isNotEmpty) {
-        final rarestItems =
-            _getHighestRarityItems(foundSniperItems, _allItemsInfo);
+        final rarestItems = _getHighestRarityItems(foundSniperItems, _allItemsInfo);
         final highestRarity = _getHighestRarity(rarestItems, _allItemsInfo);
         final rarityColor = _getColorForRarity(highestRarity);
-
+        
         _showFullScreenAlarmNotification(
           title: '¡ITEM ${highestRarity.toUpperCase()} ENCONTRADO!',
           body: rarestItems.map((e) => e.displayName).join(', '),
@@ -174,8 +165,7 @@ class ServiceLogic {
       final expiration = _getNextStockTime(parsedStock);
       _nextStockTime = expiration;
       if (expiration != null && expiration.isAfter(DateTime.now())) {
-        nextDelay =
-            expiration.difference(DateTime.now()) + const Duration(seconds: 5);
+        nextDelay = expiration.difference(DateTime.now()) + const Duration(seconds: 5);
       } else {
         nextDelay = const Duration(seconds: 20);
       }
@@ -199,23 +189,18 @@ class ServiceLogic {
       }
       nextDelay = Duration(seconds: delaySeconds);
       _nextStockTime = null;
-      _updateNotification(
-          title: "Error de Red",
-          body: "Reintentando en $delaySeconds segundos...");
+      _updateNotification(title: "Error de Red", body: "Reintentando en $delaySeconds segundos...");
     }
     if (!_isStopped) {
       _timer?.cancel();
-      final scheduleDelay =
-          nextDelay > Duration.zero ? nextDelay : const Duration(seconds: 1);
-      debugPrint(
-          '[ServiceLogic] Próxima revisión programada en ${scheduleDelay.inMinutes}m ${scheduleDelay.inSeconds % 60}s');
+      final scheduleDelay = nextDelay > Duration.zero ? nextDelay : const Duration(seconds: 1);
+      debugPrint('[ServiceLogic] Próxima revisión programada en ${scheduleDelay.inMinutes}m ${scheduleDelay.inSeconds % 60}s');
       _timer = Timer(scheduleDelay, () => _tick(service));
     }
   }
 }
 
-Future<void> _showFullScreenAlarmNotification(
-    {required String title, required String body}) async {
+Future<void> _showFullScreenAlarmNotification({required String title, required String body}) async {
   final androidDetails = AndroidNotificationDetails(
     _alarmChannelId,
     'Alarmas de Sniper',
@@ -224,7 +209,7 @@ Future<void> _showFullScreenAlarmNotification(
     priority: Priority.high,
     fullScreenIntent: true,
     category: AndroidNotificationCategory.alarm,
-    sound: const RawResourceAndroidNotificationSound('alarm_sound'),
+    // sound: const RawResourceAndroidNotificationSound('alarm_sound'), // This line is removed to prevent crash
     vibrationPattern: Int64List.fromList([0, 500, 500, 500, 500, 500]),
   );
   await _notificationsPlugin.show(
@@ -246,8 +231,7 @@ void _updateDynamicNotification({
   String title;
   if (nextStockTime != null && nextStockTime.isAfter(DateTime.now())) {
     final remaining = nextStockTime.difference(DateTime.now());
-    title =
-        'Próximo Stock en: ${_formatRemainingTime(remaining)} (a las ${_formatTime(nextStockTime)})';
+    title = 'Próximo Stock en: ${_formatRemainingTime(remaining)} (a las ${_formatTime(nextStockTime)})';
   } else {
     title = 'Buscando nuevo stock...';
   }
@@ -255,54 +239,47 @@ void _updateDynamicNotification({
   try {
     final activeWeather = currentWeather
         .map((w) => WeatherModel.fromJson(w))
-        .firstWhere((w) => w.isActive,
-            orElse: () =>
-                const WeatherModel(name: '', isActive: false, iconUrl: ''));
+        .firstWhere((w) => w.isActive, orElse: () => const WeatherModel(name: '', isActive: false, iconUrl: ''));
     if (activeWeather.isActive && activeWeather.name.isNotEmpty) {
-      bodyLines.add(
-          '<b>Clima:</b> ${_getEmojiForWeather(activeWeather.name)} ${activeWeather.name}');
+      bodyLines.add('<b>Clima:</b> ${_getEmojiForWeather(activeWeather.name)} ${activeWeather.name}');
     }
   } catch (e) {
     debugPrint('[ServiceLogic] Error al parsear clima para notificación: $e');
   }
   final foundSniperItems = _checkForSniperItems(currentStock, sniperList);
   if (foundSniperItems.isNotEmpty) {
-    if (bodyLines.isNotEmpty) bodyLines.add('<br>');
-    String foundItemsHtml =
-        '<b><font color="#34C759">¡Sniper Exitoso!:</font></b> ';
-    List<String> foundItemElements = [];
-    for (var item in foundSniperItems) {
-      final info = allItemsInfo[item.displayName];
-      final rarity = info?.rarity ?? 'common';
-      final color = _getHexColorForRarity(rarity);
-      foundItemElements.add(
-          '<font color="$color">•${_getEmojiForItem(item.displayName)} ${item.displayName}</font>');
-    }
-    foundItemsHtml += foundItemElements.join(' ');
-    bodyLines.add(foundItemsHtml);
+      if (bodyLines.isNotEmpty) bodyLines.add('<br>');
+      String foundItemsHtml = '<b><font color="#34C759">¡Sniper Exitoso!:</font></b> ';
+      List<String> foundItemElements = [];
+      for (var item in foundSniperItems) {
+          final info = allItemsInfo[item.displayName];
+          final rarity = info?.rarity ?? 'common';
+          final color = _getHexColorForRarity(rarity);
+          foundItemElements.add('<font color="$color">•${_getEmojiForItem(item.displayName)} ${item.displayName}</font>');
+      }
+      foundItemsHtml += foundItemElements.join(' ');
+      bodyLines.add(foundItemsHtml);
   }
   final stockForNotification = _filterStockForNotification(currentStock);
   if (stockForNotification.isNotEmpty) {
-    if (bodyLines.isNotEmpty) bodyLines.add('<br>');
-    List<String> itemHtmlElements = [];
-    for (var item in stockForNotification) {
-      final info = allItemsInfo[item.displayName];
-      final rarity = info?.rarity ?? 'common';
-      final color = _getHexColorForRarity(rarity);
-      itemHtmlElements.add(
-          '<font color="$color">•${_getEmojiForItem(item.displayName)} ${item.displayName}</font>');
-    }
-    bodyLines.add('<b>Stock:</b> ${itemHtmlElements.join(' ')}');
+      if (bodyLines.isNotEmpty) bodyLines.add('<br>');
+      List<String> itemHtmlElements = [];
+      for (var item in stockForNotification) {
+        final info = allItemsInfo[item.displayName];
+        final rarity = info?.rarity ?? 'common';
+        final color = _getHexColorForRarity(rarity);
+        itemHtmlElements.add('<font color="$color">•${_getEmojiForItem(item.displayName)} ${item.displayName}</font>');
+      }
+      bodyLines.add('<b>Stock:</b> ${itemHtmlElements.join(' ')}');
   }
   if (sniperList.isNotEmpty) {
     if (bodyLines.isNotEmpty) bodyLines.add('<br>');
     List<String> sniperItemElements = [];
     for (var itemName in sniperList) {
-      final info = allItemsInfo[itemName];
-      final rarity = info?.rarity ?? 'common';
-      final color = _getHexColorForRarity(rarity);
-      sniperItemElements.add(
-          '<font color="$color">•${_getEmojiForItem(itemName)} $itemName</font>');
+        final info = allItemsInfo[itemName];
+        final rarity = info?.rarity ?? 'common';
+        final color = _getHexColorForRarity(rarity);
+        sniperItemElements.add('<font color="$color">•${_getEmojiForItem(itemName)} $itemName</font>');
     }
     bodyLines.add('<b>Vigilando:</b> ${sniperItemElements.join(' ')}');
   }
@@ -310,17 +287,16 @@ void _updateDynamicNotification({
   final snipedFruits = sniperList.where((item) => _isFruit(item)).toList();
   String snipedFruitsHtml = '<b>Frutas Vigiladas:</b> ';
   if (snipedFruits.isNotEmpty) {
-    List<String> fruitElements = [];
-    for (var fruitName in snipedFruits) {
-      final info = allItemsInfo[fruitName];
-      final rarity = info?.rarity ?? 'common';
-      final color = _getHexColorForRarity(rarity);
-      fruitElements.add(
-          '<font color="$color">•${_getEmojiForItem(fruitName)} $fruitName</font>');
-    }
-    snipedFruitsHtml += fruitElements.join(' ');
+      List<String> fruitElements = [];
+      for (var fruitName in snipedFruits) {
+          final info = allItemsInfo[fruitName];
+          final rarity = info?.rarity ?? 'common';
+          final color = _getHexColorForRarity(rarity);
+          fruitElements.add('<font color="$color">•${_getEmojiForItem(fruitName)} $fruitName</font>');
+      }
+      snipedFruitsHtml += fruitElements.join(' ');
   } else {
-    snipedFruitsHtml += 'Ninguna';
+      snipedFruitsHtml += 'Ninguna';
   }
   bodyLines.add(snipedFruitsHtml);
   String body = bodyLines.join('');
@@ -330,8 +306,7 @@ void _updateDynamicNotification({
   _updateNotification(title: title, body: body);
 }
 
-List<StockItemEntity> _filterStockForNotification(
-    Map<String, List<StockItemEntity>> currentStock) {
+List<StockItemEntity> _filterStockForNotification(Map<String, List<StockItemEntity>> currentStock) {
   final relevantItems = <StockItemEntity>[];
   if (currentStock.containsKey('seed')) {
     relevantItems.addAll(currentStock['seed']!);
@@ -344,15 +319,7 @@ List<StockItemEntity> _filterStockForNotification(
 
 bool _isFruit(String itemName) {
   final name = itemName.toLowerCase();
-  const fruits = [
-    'carrot',
-    'strawberry',
-    'tomato',
-    'blueberry',
-    'watermelon',
-    'pineapple',
-    'apple'
-  ];
+  const fruits = ['carrot', 'strawberry', 'tomato', 'blueberry', 'watermelon', 'pineapple', 'apple'];
   return fruits.any((fruit) => name.contains(fruit));
 }
 
@@ -361,15 +328,13 @@ Map<String, List<StockItemEntity>> _parseStock(Map<String, dynamic> rawStock) {
   rawStock.forEach((key, value) {
     if (value is List && key.endsWith('_stock')) {
       final category = key.replaceAll('_stock', '');
-      stockData[category] =
-          value.map((e) => StockItemModel.fromJson(e)).toList();
+      stockData[category] = value.map((e) => StockItemModel.fromJson(e)).toList();
     }
   });
   return stockData;
 }
 
-List<StockItemEntity> _checkForSniperItems(
-    Map<String, List<StockItemEntity>> stock, List<String> sniperList) {
+List<StockItemEntity> _checkForSniperItems(Map<String, List<StockItemEntity>> stock, List<String> sniperList) {
   if (sniperList.isEmpty) return [];
   final foundItems = <StockItemEntity>[];
   final sniperSet = sniperList.toSet();
@@ -383,28 +348,17 @@ List<StockItemEntity> _checkForSniperItems(
   return foundItems;
 }
 
-List<StockItemEntity> _getHighestRarityItems(
-    List<StockItemEntity> items, Map<String, ItemInfoEntity> allInfo) {
+List<StockItemEntity> _getHighestRarityItems(List<StockItemEntity> items, Map<String, ItemInfoEntity> allInfo) {
   if (items.isEmpty) return [];
   final highestRarityName = _getHighestRarity(items, allInfo);
   return items.where((item) {
     final info = allInfo[item.displayName];
-    return info != null &&
-        info.rarity.toLowerCase() == highestRarityName.toLowerCase();
+    return info != null && info.rarity.toLowerCase() == highestRarityName.toLowerCase();
   }).toList();
 }
 
-String _getHighestRarity(
-    List<StockItemEntity> items, Map<String, ItemInfoEntity> allInfo) {
-  const rarityOrder = [
-    'common',
-    'uncommon',
-    'rare',
-    'legendary',
-    'mythical',
-    'divine',
-    'prismatic'
-  ];
+String _getHighestRarity(List<StockItemEntity> items, Map<String, ItemInfoEntity> allInfo) {
+  const rarityOrder = ['common', 'uncommon', 'rare', 'legendary', 'mythical', 'divine', 'prismatic'];
   int highestIndex = -1;
   String highestRarity = 'common';
   for (var item in items) {
@@ -422,50 +376,32 @@ String _getHighestRarity(
 
 Color _getColorForRarity(String rarity) {
   switch (rarity.toLowerCase()) {
-    case 'uncommon':
-      return CupertinoColors.systemGreen;
-    case 'rare':
-      return CupertinoColors.systemBlue;
-    case 'legendary':
-      return CupertinoColors.systemPurple;
-    case 'mythical':
-      return CupertinoColors.systemOrange;
-    case 'divine':
-      return CupertinoColors.systemYellow;
-    case 'prismatic':
-      return CupertinoColors.systemPink;
-    default:
-      return CupertinoColors.systemGrey;
+    case 'uncommon': return CupertinoColors.systemGreen;
+    case 'rare': return CupertinoColors.systemBlue;
+    case 'legendary': return CupertinoColors.systemPurple;
+    case 'mythical': return CupertinoColors.systemOrange;
+    case 'divine': return CupertinoColors.systemYellow;
+    case 'prismatic': return CupertinoColors.systemPink;
+    default: return CupertinoColors.systemGrey;
   }
 }
 
 String _getHexColorForRarity(String rarity) {
   switch (rarity.toLowerCase()) {
-    case 'uncommon':
-      return '#34C759';
-    case 'rare':
-      return '#007AFF';
-    case 'legendary':
-      return '#AF52DE';
-    case 'mythical':
-      return '#FF9500';
-    case 'divine':
-      return '#FFCC00';
-    case 'prismatic':
-      return '#FF2D55';
-    default:
-      return '#8E8E93';
+    case 'uncommon': return '#34C759';
+    case 'rare': return '#007AFF';
+    case 'legendary': return '#AF52DE';
+    case 'mythical': return '#FF9500';
+    case 'divine': return '#FFCC00';
+    case 'prismatic': return '#FF2D55';
+    default: return '#8E8E93';
   }
 }
 
 Future<void> _updateNotificationTitleOnly(String title) async {
-  final bigTextStyleInformation = BigTextStyleInformation(_lastNotificationBody,
-      htmlFormatBigText: true,
-      contentTitle: title,
-      htmlFormatContentTitle: true);
+  final bigTextStyleInformation = BigTextStyleInformation(_lastNotificationBody, htmlFormatBigText: true, contentTitle: title, htmlFormatContentTitle: true);
   final androidPlatformChannelSpecifics = AndroidNotificationDetails(
-    _notificationChannelId,
-    'Servicio de Sniper 24/7',
+    _notificationChannelId, 'Servicio de Sniper 24/7',
     icon: '@mipmap/ic_launcher',
     ongoing: true,
     styleInformation: bigTextStyleInformation,
@@ -473,28 +409,21 @@ Future<void> _updateNotificationTitleOnly(String title) async {
     priority: Priority.low,
     onlyAlertOnce: true,
   );
-  await _notificationsPlugin.show(_notificationId, title, _lastNotificationBody,
-      NotificationDetails(android: androidPlatformChannelSpecifics));
+  await _notificationsPlugin.show(_notificationId, title, _lastNotificationBody, NotificationDetails(android: androidPlatformChannelSpecifics));
 }
 
-Future<void> _updateNotification(
-    {required String title, required String body}) async {
+Future<void> _updateNotification({required String title, required String body}) async {
   _lastNotificationBody = body;
-  final bigTextStyleInformation = BigTextStyleInformation(body,
-      htmlFormatBigText: true,
-      contentTitle: title,
-      htmlFormatContentTitle: true);
+  final bigTextStyleInformation = BigTextStyleInformation(body, htmlFormatBigText: true, contentTitle: title, htmlFormatContentTitle: true);
   final androidPlatformChannelSpecifics = AndroidNotificationDetails(
-    _notificationChannelId,
-    'Servicio de Sniper 24/7',
+    _notificationChannelId, 'Servicio de Sniper 24/7',
     icon: '@mipmap/ic_launcher',
     ongoing: true,
     styleInformation: bigTextStyleInformation,
     importance: Importance.low,
     priority: Priority.low,
   );
-  await _notificationsPlugin.show(_notificationId, title, body,
-      NotificationDetails(android: androidPlatformChannelSpecifics));
+  await _notificationsPlugin.show(_notificationId, title, body, NotificationDetails(android: androidPlatformChannelSpecifics));
 }
 
 DateTime? _getNextStockTime(Map<String, List<StockItemEntity>> stock) {
@@ -504,8 +433,7 @@ DateTime? _getNextStockTime(Map<String, List<StockItemEntity>> stock) {
       .expand((list) => list)
       .where((item) => item.endDate.isAfter(now))
       .forEach((item) {
-    if (earliestFutureDate == null ||
-        item.endDate.isBefore(earliestFutureDate!)) {
+    if (earliestFutureDate == null || item.endDate.isBefore(earliestFutureDate!)) {
       earliestFutureDate = item.endDate;
     }
   });
@@ -541,7 +469,7 @@ String _getEmojiForWeather(String weatherName) {
 
 String _getEmojiForItem(String itemName) {
   final name = itemName.toLowerCase();
-  if (name.contains('egg')) return '🥚';
+  if (name.contains('egg')) return '�';
   if (name.contains('carrot')) return '🥕';
   if (name.contains('strawberry')) return '🍓';
   if (name.contains('tomato')) return '🍅';
@@ -550,9 +478,7 @@ String _getEmojiForItem(String itemName) {
   if (name.contains('pineapple')) return '🍍';
   if (name.contains('apple')) return '🍎';
   if (name.contains('sprinkler')) return '💦';
-  if (name.contains('tool') ||
-      name.contains('trowel') ||
-      name.contains('wrench')) return '🛠️';
+  if (name.contains('tool') || name.contains('trowel') || name.contains('wrench')) return '🛠️';
   if (name.contains('can') || name.contains('spray')) return '🥫';
   return '🌱';
 }
@@ -565,17 +491,16 @@ class BackgroundServiceHandler {
       'Alarmas de Sniper',
       description: 'Canal para las alarmas críticas de items encontrados.',
       importance: Importance.max,
-      sound: RawResourceAndroidNotificationSound('alarm_sound'),
+      // --- ARREGLO: Se elimina el sonido personalizado para evitar el error si no existe ---
+      // sound: RawResourceAndroidNotificationSound('alarm_sound'),
       playSound: true,
     );
     const channel = AndroidNotificationChannel(
-      _notificationChannelId,
-      'Servicio de Sniper 24/7',
+      _notificationChannelId, 'Servicio de Sniper 24/7',
       description: 'Notificación persistente para el monitoreo de stock.',
       importance: Importance.low,
     );
-    final plugin = _notificationsPlugin.resolvePlatformSpecificImplementation<
-        AndroidFlutterLocalNotificationsPlugin>();
+    final plugin = _notificationsPlugin.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
     await plugin?.createNotificationChannel(channel);
     await plugin?.createNotificationChannel(alarmChannel);
     await service.configure(
