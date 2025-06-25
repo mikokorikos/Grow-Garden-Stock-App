@@ -20,12 +20,12 @@ class CategoryTabScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     // Se elimina el CupertinoPageScaffold y la navigationBar
     if (items.isEmpty) {
-      return const Center(child: Text("No hay stock para esta categoría."));
+      return const Center(child: Text("No hay stock para esta categoría.")); // Text puede ser const
     }
 
     return GridView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: 16.0),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+      padding: const EdgeInsets.symmetric(horizontal: 16.0), // Puede ser const
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount( // Puede ser const
           crossAxisCount: 2,
           crossAxisSpacing: 16.0,
           mainAxisSpacing: 16.0,
@@ -57,36 +57,36 @@ class CategoryTabScreen extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(stockItem.displayName,
-                    style: const TextStyle(
+                    style: const TextStyle( // Puede ser const
                         fontSize: 22, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 16),
+                const SizedBox(height: 16), // Puede ser const
                 Image.network(
                   stockItem.iconUrl,
                   height: 100,
                   errorBuilder: (context, error, stackTrace) =>
-                      const Icon(CupertinoIcons.photo, size: 80),
+                      const Icon(CupertinoIcons.photo, size: 80), // Puede ser const
                 ),
                 if (itemInfo?.description.isNotEmpty ?? false) ...[
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 16), // Puede ser const
                   Text(
                     itemInfo!.description,
                     textAlign: TextAlign.center,
-                    style: TextStyle(
+                    style: TextStyle( // No puede ser const por AppTheme.textColor.withOpacity(0.7)
                         fontSize: 14,
                         fontStyle: FontStyle.italic,
                         color: AppTheme.textColor.withOpacity(0.7)),
                   ),
                 ],
-                const SizedBox(height: 24),
+                const SizedBox(height: 24), // Puede ser const
                 if (itemInfo != null) ...[
                   _buildInfoRow('Rareza:', itemInfo.rarity),
                   if (itemInfo.price != "0")
                     _buildInfoRow(
                         'Precio:', '${itemInfo.price} ${itemInfo.currency}'),
                 ],
-                const SizedBox(height: 24),
+                const SizedBox(height: 24), // Puede ser const
                 CupertinoButton.filled(
-                    child: const Text('Cerrar'),
+                    child: const Text('Cerrar'), // Puede ser const
                     onPressed: () => Navigator.of(ctx).pop()),
               ],
             ),
@@ -100,24 +100,24 @@ class CategoryTabScreen extends StatelessWidget {
     if (value.trim().isEmpty ||
         value.contains('N/A') ||
         value.toLowerCase() == 'null') {
-      return const SizedBox.shrink();
+      return const SizedBox.shrink(); // Puede ser const
     }
 
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6.0),
+      padding: const EdgeInsets.symmetric(vertical: 6.0), // Puede ser const
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(label,
-              style: TextStyle(
+              style: TextStyle( // No puede ser const por AppTheme.textColor.withOpacity(0.9)
                   fontWeight: FontWeight.w600,
                   color: AppTheme.textColor.withOpacity(0.9))),
-          const SizedBox(width: 16),
+          const SizedBox(width: 16), // Puede ser const
           Flexible(
             child: Text(value,
                 textAlign: TextAlign.end,
-                style: const TextStyle(color: AppTheme.textColor)),
+                style: const TextStyle(color: AppTheme.textColor)), // Puede ser const
           ),
         ],
       ),

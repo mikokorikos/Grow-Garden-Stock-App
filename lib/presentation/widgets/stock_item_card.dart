@@ -29,18 +29,18 @@ class StockItemCard extends StatelessWidget {
         children: [
           Expanded(
             child: Padding(
-              padding: const EdgeInsets.all(8.0),
+              padding: const EdgeInsets.all(8.0), // const
               child: CachedNetworkImage(
                 imageUrl: stockItem.iconUrl,
-                httpHeaders: const {
+                httpHeaders: const { // const
                   'User-Agent':
                       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/96.0.4664.110 Safari/537.36',
                 },
                 fit: BoxFit.contain,
                 placeholder: (context, url) =>
-                    const CupertinoActivityIndicator(),
+                    const CupertinoActivityIndicator(), // const
                 errorWidget: (context, url, error) =>
-                    const Icon(CupertinoIcons.photo, size: 40),
+                    const Icon(CupertinoIcons.photo, size: 40), // const
               ),
             ),
           ),
@@ -49,20 +49,20 @@ class StockItemCard extends StatelessWidget {
             textAlign: TextAlign.center,
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14), // const
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 4), // const
           Text(
             'Stock: ${stockItem.quantity}',
-            style: const TextStyle(
+            style: const TextStyle( // const
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
-                color: AppTheme.primary),
+                color: AppTheme.primary), // AppTheme.primary es probablemente const
           ),
           if (itemInfo != null)
             Text(
               itemInfo!.rarity,
-              style: TextStyle(
+              style: TextStyle( // No puede ser const por rarityColor que se calcula dinámicamente
                   fontSize: 12,
                   color: rarityColor,
                   fontWeight: FontWeight.w500),
@@ -73,6 +73,7 @@ class StockItemCard extends StatelessWidget {
   }
 
   Color _getRarityColor(String? rarity) {
+    // Los colores de CupertinoColors son constantes, así que esto está bien.
     switch (rarity?.toLowerCase()) {
       case 'common':
         return CupertinoColors.systemGrey;
@@ -87,7 +88,7 @@ class StockItemCard extends StatelessWidget {
       case 'divine':
         return CupertinoColors.systemYellow;
       default:
-        return AppTheme.textColor;
+        return AppTheme.textColor; // Asumiendo que AppTheme.textColor es const o un getter de un const
     }
   }
 }

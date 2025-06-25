@@ -1,5 +1,6 @@
-import 'package:flutter/foundation.dart';
 import '../../domain/entities/item_info_entity.dart';
+import '../../core/utils/logger.dart'; // Importar logger
+import '../../core/error/exceptions.dart'; // Importar ParsingException
 
 class ItemInfoModel extends ItemInfoEntity {
   const ItemInfoModel({
@@ -12,23 +13,31 @@ class ItemInfoModel extends ItemInfoEntity {
   });
 
   factory ItemInfoModel.fromJson(Map<String, dynamic> json) {
-    // El debugPrint es útil para ver qué se está parseando
-    // debugPrint('[ItemInfoModel.fromJson] Parseando item: ${json['display_name']}');
+    final className = "ItemInfoModel";
+    try {
+      // logV('[$className.fromJson] Parseando item: ${json['display_name']}');
 
-    return ItemInfoModel(
-      // *** AQUÍ ESTÁ LA CORRECCIÓN CLAVE ***
-      // Leemos de 'display_name' en lugar de 'name'.
-      name: json['display_name'] ?? 'Nombre Desconocido',
+      String rarityValue = 'Común'; // Default
+      if (json['rarity'] != null && json['rarity'].toString().isNotEmpty) {
+        rarityValue = json['rarity'].toString();
+      }
 
-      // Asignamos valores por defecto si los campos son nulos o vacíos en la API
-      rarity: (json['rarity'] == null || (json['rarity'] as String).isEmpty)
-          ? 'Común'
-          : json['rarity'],
+      String priceValue = '0'; // Default
+      if (json['price'] != null) {
+          priceValue = json['price'].toString();
+      }
 
-      image: json['icon'] ?? '',
-      price: json['price']?.toString() ?? '0',
-      currency: json['currency'] ?? 'Sheckles',
-      description: json['description'] ?? '',
-    );
+      return ItemInfoModel(
+        name: json['display_name']?.toString() ?? 'Nombre Desconocido',
+        rarity: rarityValue,
+        image: json['icon']?.toString() ?? '', // Asumimos que 'icon' es la URL de la imagen
+        price: priceValue,
+        currency: json['currency']?.toString() ?? 'Sheckles',
+        description: json['description']?.toString() ?? 'Sin descripción.',
+      );
+    } catch (e, s) {
+      logE('[$className.fromJson] Error al parsear ItemInfoModel. JSON: $json', error: e, stackTrace: s);
+      throw ParsingException('Error al parsear ItemInfoModel: ${e.toString()}');
+    }
   }
 }
