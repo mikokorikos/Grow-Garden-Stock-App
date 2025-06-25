@@ -1,7 +1,7 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:http/http.dart' as http;
-import 'package:grow_garden_tracker/core/background/background_service_handler.dart'; // <-- ARREGLO: Importación añadida
+import 'package:grow_garden_tracker/core/background/background_service_handler.dart';
 import 'package:grow_garden_tracker/core/database/sniper_repository.dart';
 import 'package:grow_garden_tracker/data/repositories/item_info_repository_impl.dart';
 import 'package:grow_garden_tracker/features/sniper/bloc/sniper_bloc.dart';
