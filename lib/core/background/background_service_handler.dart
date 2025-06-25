@@ -100,7 +100,7 @@ class ServiceLogic {
 
       final newStockMap = results[0] as Map<String, dynamic>;
       final newWeather = results[1] as List<dynamic>;
-      final parsedStock = _parseStock(newStockMap); // Parseado una vez
+      final parsedStock = _parseStock(newStockMap);
       final stockChanged = !const DeepCollectionEquality().equals(_lastKnownStock, newStockMap);
 
       if (stockChanged) {
@@ -125,15 +125,16 @@ class ServiceLogic {
       
       final expiration = _getNextStockTime(parsedStock);
       
+      // --- LÓGICA DE ACTUALIZACIÓN CORREGIDA ---
       if (expiration != null && expiration.isAfter(DateTime.now())) {
+        // Caso 1: El stock está activo. Esperamos hasta que expire + 5 segundos.
         nextDelay = expiration.difference(DateTime.now()) + const Duration(seconds: 5);
       } else {
-        nextDelay = const Duration(seconds: 60); 
+        // Caso 2: El stock está vacío o ya expiró. Revisamos de nuevo en 15 segundos.
+        nextDelay = const Duration(seconds: 15); 
       }
       
       _failureCount = 0;
-      // --- MODIFICACIÓN CLAVE ---
-      // Se pasa el stock parseado para construir la notificación.
       _updateDynamicNotification(
         nextStockTime: DateTime.now().add(nextDelay), 
         sniperList: _sniperList,
@@ -216,7 +217,7 @@ Color _getColorForRarity(String rarity) {
   }
 }
 
-// --- FUNCIÓN TOTALMENTE ACTUALIZADA ---
+// --- FUNCIÓN DE NOTIFICACIÓN TOTALMENTE ACTUALIZADA ---
 void _updateDynamicNotification({ 
   required DateTime? nextStockTime, 
   required List<String> sniperList,
@@ -228,11 +229,13 @@ void _updateDynamicNotification({
   
   final List<String> bodyLines = [];
 
-  // 1. Añadir la línea de stock de semillas
+  // 1. Añadir la línea de stock de semillas con íconos y nombres
   final seedStock = currentStock['seed'] ?? [];
   if (seedStock.isNotEmpty) {
-    final seedEmojis = seedStock.map((item) => _getEmojiForItem(item.displayName)).join(' ');
-    bodyLines.add('Stock: $seedEmojis');
+    final seedInfo = seedStock
+      .map((item) => "${_getEmojiForItem(item.displayName)} ${item.displayName}")
+      .join(', ');
+    bodyLines.add('Stock: $seedInfo');
   }
 
   // 2. Añadir la línea de la lista de sniper
@@ -246,14 +249,13 @@ void _updateDynamicNotification({
   if (bodyLines.isEmpty) {
     body = 'Añade items a tu lista de sniper.';
   } else {
-    body = bodyLines.join('\n'); // Unir líneas con un salto de línea
+    body = bodyLines.join('\n');
   }
 
   _updateNotification(title: title, body: body);
 }
 
 Future<void> _updateNotification({required String title, required String body}) async {
-  // Usamos BigTextStyle para asegurar que ambas líneas sean visibles.
   final bigTextStyleInformation = BigTextStyleInformation(
     body, 
     htmlFormatBigText: true, 
@@ -265,7 +267,7 @@ Future<void> _updateNotification({required String title, required String body}) 
     'Servicio de Sniper 24/7',
     icon: '@mipmap/ic_launcher',
     ongoing: true,
-    styleInformation: bigTextStyleInformation, // Aplicar el estilo de texto grande
+    styleInformation: bigTextStyleInformation,
     importance: Importance.low,
     priority: Priority.low,
   );
@@ -303,7 +305,7 @@ String _getEmojiForItem(String itemName) {
   if (name.contains('apple')) return '🍎';
   if (name.contains('sprinkler')) return '💦';
   if (name.contains('tool') || name.contains('trowel') || name.contains('wrench')) return '🛠️';
-  return '🌱'; // Emoji por defecto
+  return '🌱';
 }
 
 class BackgroundServiceHandler {
