@@ -1,34 +1,80 @@
 import 'package:grow_garden_tracker/data/datasources/item_info_rest_data_source.dart';
 import 'package:grow_garden_tracker/domain/entities/item_info_entity.dart';
 import 'package:grow_garden_tracker/domain/repositories/item_info_repository.dart';
-import 'package:grow_garden_tracker/core/error/exceptions.dart'; // Necesario para AppException
-import 'package:grow_garden_tracker/core/utils/logger.dart'; // Importar logger
+import 'package:grow_garden_tracker/core/error/exceptions.dart';
+import 'package:grow_garden_tracker/core/utils/logger.dart';
+import 'package:hive_flutter/hive_flutter.dart';
+import 'package:grow_garden_tracker/data/models/item_info_model.dart';
 
 class ItemInfoRepositoryImpl implements ItemInfoRepository {
   final ItemInfoRestDataSource itemInfoDataSource;
-  final String _className = "ItemInfoRepositoryImpl"; // Para consistencia en logging
+  final String _className = "ItemInfoRepositoryImpl";
+
+  // Nombre para nuestra "caja" de Hive
+  static const String _boxName = 'item_info_cache';
 
   ItemInfoRepositoryImpl({
     required this.itemInfoDataSource,
   });
 
   @override
-  Future<Map<String, ItemInfoEntity>> getAllItemsInfo() async {
-    final methodName = "$_className.getAllItemsInfo"; // Usar _className
-    logD("[$methodName] Iniciando...");
+  Future<Map<String, ItemInfoEntity>> getAllItemsInfo(
+      {bool forceRefresh = false}) async {
+    final methodName = "$_className.getAllItemsInfo";
+    logD("[$methodName] Iniciando... forceRefresh: $forceRefresh");
+
+    final box = await Hive.openBox(_boxName);
+
+    // Si no forzamos la actualización y la caja no está vacía, usamos el caché.
+    if (!forceRefresh && box.isNotEmpty) {
+      logI(
+          "[$methodName] Datos encontrados en caché local. Cargando desde Hive.");
+      final Map<String, ItemInfoEntity> cachedItems = {};
+      for (var key in box.keys) {
+        final itemJson = box.get(key) as Map<dynamic, dynamic>;
+        cachedItems[key as String] =
+            ItemInfoModel.fromJson(Map<String, dynamic>.from(itemJson));
+      }
+      return cachedItems;
+    }
+
+    // Si no, vamos a la red.
+    logI(
+        "[$methodName] No hay caché o se forzó la actualización. Obteniendo datos de la API...");
     try {
       final itemsList = await itemInfoDataSource.getAllItemsInfo();
       final Map<String, ItemInfoEntity> result = {
         for (var item in itemsList) item.name: item
       };
-      logI("[$methodName] Información de items obtenida y mapeada exitosamente. Total: ${result.length} items.");
+
+      logI(
+          "[$methodName] Información de items obtenida. Guardando en caché...");
+
+      // Limpiar la caja vieja y guardar los nuevos datos
+      await box.clear();
+      result.forEach((key, value) {
+        // Hive no puede guardar objetos de clases personalizadas directamente sin adaptadores.
+        // La forma más fácil es guardar su representación JSON.
+        final itemModel = value as ItemInfoModel;
+        box.put(key, {
+          'display_name': itemModel.name,
+          'rarity': itemModel.rarity,
+          'icon': itemModel.image,
+          'price': itemModel.price,
+          'currency': itemModel.currency,
+          'description': itemModel.description,
+        });
+      });
+      logI("[$methodName] ${result.length} items guardados en caché local.");
+
       return result;
-    } on AppException catch(e) {
+    } on AppException catch (e) {
       logW("[$methodName] AppException capturada: ${e.message}");
       rethrow;
     } catch (e, s) {
       logE("[$methodName] ERROR no esperado", error: e, stackTrace: s);
-      throw ServerException("Error inesperado al obtener información de items: ${e.toString()}");
+      throw ServerException(
+          "Error inesperado al obtener información de items: ${e.toString()}");
     }
   }
 }

@@ -162,6 +162,9 @@ class ServiceLogic {
           'rarityColorHex': rarityColor.value,
         });
       }
+
+
+
       final expiration = _getNextStockTime(parsedStock);
       _nextStockTime = expiration;
       if (expiration != null && expiration.isAfter(DateTime.now())) {
