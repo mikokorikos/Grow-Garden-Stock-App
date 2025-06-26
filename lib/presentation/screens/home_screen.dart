@@ -50,27 +50,26 @@ class HomeScreen extends StatelessWidget {
         ],
       ),
       tabBuilder: (BuildContext context, int index) {
-        CupertinoTabViewReturnValue? returnValue;
+        Widget? screen; // Usar Widget? como tipo para la pantalla
         switch (index) {
           case 0:
-            returnValue = CupertinoTabView(builder: (context) {
+            screen = CupertinoTabView(builder: (context) {
               return const StockHostScreen();
             });
             break;
           case 1:
-            returnValue = CupertinoTabView(builder: (context) {
+            screen = CupertinoTabView(builder: (context) {
               return const SniperScreen();
             });
             break;
           case 2:
-            returnValue = CupertinoTabView(builder: (context) {
+            screen = CupertinoTabView(builder: (context) {
               return const SettingsScreen();
             });
             break;
         }
-        // Asegurarse de que returnValue no sea null antes de devolverlo.
-        // Por defecto, si el índice no coincide, se podría devolver la primera pestaña o un widget de error.
-        return returnValue ?? CupertinoTabView(builder: (context) => const StockHostScreen());
+        // Devolver la pantalla seleccionada o la primera por defecto si algo sale mal.
+        return screen ?? CupertinoTabView(builder: (context) => const StockHostScreen());
       },
     );
   }
