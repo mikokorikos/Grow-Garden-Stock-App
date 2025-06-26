@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:http/http.dart' as http;
+import 'package:hive_flutter/hive_flutter.dart'; // IMPORTANTE AÑADIR
 import 'package:grow_garden_tracker/core/background/background_service_handler.dart';
 import 'package:grow_garden_tracker/core/database/sniper_repository.dart';
 import 'package:grow_garden_tracker/core/services/navigation_event_service.dart';
@@ -19,16 +20,27 @@ import 'core/theme/app_theme.dart';
 import 'data/datasources/item_info_rest_data_source.dart';
 import 'presentation/bloc/stock/stock_bloc.dart';
 import 'presentation/screens/home_screen.dart';
+import 'presentation/screens/loading_screen.dart'; // IMPORTANTE AÑADIR
 import 'domain/usecases/get_all_items_info_usecase.dart';
 
+// Instancias de los servicios
 final RingtoneService ringtoneService = RingtoneService();
 final NotificationService notificationService = NotificationService();
 
 Future<void> main() async {
+  // Asegura que los bindings de Flutter estén listos
   WidgetsFlutterBinding.ensureInitialized();
+
+  // === INICIO DE CAMBIOS ===
+  // 1. Inicializar Hive para la base de datos local
+  await Hive.initFlutter();
+  // === FIN DE CAMBIOS ===
+
+  // Inicializar el resto de los servicios
   await notificationService.initialize();
   await BackgroundServiceHandler.initializeService();
 
+  // Inyección de dependencias (creación de BLoCs y repositorios)
   final client = http.Client();
   final itemInfoDataSource = ItemInfoRestDataSourceImpl(client: client);
   final itemInfoRepository =
@@ -42,6 +54,7 @@ Future<void> main() async {
     sniperRepository: sniperRepository,
   );
 
+  // Ejecutar la aplicación
   runApp(MyApp(
     stockBloc: stockBloc,
     sniperBloc: sniperBloc,
@@ -67,7 +80,6 @@ class _MyAppState extends State<MyApp> {
   StreamSubscription? _alarmServiceSubscription;
   final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
-  // Flag para prevenir alarmas en bucle
   bool _isAlarmCurrentlyShowing = false;
 
   @override
@@ -99,111 +111,42 @@ class _MyAppState extends State<MyApp> {
   }
 
   void _showSniperAlarm(BuildContext context, dynamic eventData) async {
-    // === INICIO DE CAMBIOS ===
-    // 1. Prevenir que la función se ejecute de nuevo si ya hay una alarma mostrándose.
     if (_isAlarmCurrentlyShowing) {
       logW(
           "[MyAppState] Alarma ya se está mostrando. Ignorando nueva solicitud.");
       return;
     }
     _isAlarmCurrentlyShowing = true;
-    // === FIN DE CAMBIOS ===
 
     List<String> foundItems = ["Item Desconocido"];
     Color rarityColor = CupertinoColors.systemRed;
 
-    // ... (El parseo de `eventData` se mantiene igual) ...
     if (eventData is Map) {
       final Map<String, dynamic> dataMap = Map<String, dynamic>.from(eventData);
-      if (dataMap['type'] == 'sniper_alarm_legacy') {
-        foundItems = [dataMap['message']?.toString() ?? "¡Alarma!"];
-      } else {
-        dynamic itemsData = dataMap['items'];
-        if (itemsData is List) {
-          try {
-            foundItems =
-                List<String>.from(itemsData.map((item) => item.toString()));
-          } catch (e) {
-            logE(
-                "[MyAppState] Error convirtiendo lista de items a List<String>: $e. ItemsData: $itemsData");
-            foundItems = ["Error en items"];
-          }
-        } else if (itemsData is String) {
-          try {
-            final decodedList = jsonDecode(itemsData);
-            if (decodedList is List) {
-              foundItems =
-                  List<String>.from(decodedList.map((item) => item.toString()));
-            } else {
-              logW(
-                  "[MyAppState] Items decodificados no son una lista: $decodedList");
-              foundItems = [itemsData];
-            }
-          } catch (e) {
-            logW(
-                "[MyAppState] Items no era un JSON string de lista, tratándolo como string simple: $itemsData. Error: $e");
-            foundItems = [itemsData];
-          }
-        } else if (itemsData != null) {
-          logW(
-              "[MyAppState] Tipo de itemsData no esperado: ${itemsData.runtimeType}. Valor: $itemsData");
-          foundItems = ["Formato de items no reconocido"];
-        }
-
-        dynamic colorData = dataMap['rarityColorHex'];
-        if (colorData is String) {
-          try {
-            rarityColor = Color(int.parse(colorData));
-          } catch (e) {
-            logE(
-                "[MyAppState] Error parseando rarityColorHex (String) del payload: $colorData. Error: $e");
-          }
-        } else if (colorData is int) {
-          rarityColor = Color(colorData);
-        } else if (colorData != null) {
-          logW(
-              "[MyAppState] Tipo de colorData no esperado: ${colorData.runtimeType}. Valor: $colorData");
-        }
+      dynamic itemsData = dataMap['items'];
+      if (itemsData is List) {
+        foundItems =
+            List<String>.from(itemsData.map((item) => item.toString()));
       }
-    } else if (eventData is String) {
-      foundItems = [eventData];
+      dynamic colorData = dataMap['rarityColorHex'];
+      if (colorData is int) {
+        rarityColor = Color(colorData);
+      }
     }
 
     logI(
         "[MyAppState] _showSniperAlarm para items: $foundItems, Color: $rarityColor");
 
-    // Cancelar notificaciones viejas (esto está bien)
     logD("[MyAppState] Cancelando notificación de alarma anterior (ID 999)...");
     await notificationService.cancelSniperAlarmNotification();
     await Future.delayed(const Duration(milliseconds: 100));
 
-    // Reproducir sonido (esto está bien)
     logD("[MyAppState] Reproduciendo sonido de alarma...");
     ringtoneService.stop();
     ringtoneService.play();
 
-    // === INICIO DE CAMBIOS ===
-    // 2. ELIMINAR LA CREACIÓN DE UNA NUEVA NOTIFICACIÓN DESDE AQUÍ
-    // El servicio en segundo plano ya creó la notificación que despertó al teléfono.
-    // Volver a crearla aquí es lo que causa el bucle.
-    /*
-    logD(
-        "[MyAppState] Mostrando nueva notificación de alarma (con fullScreenIntent)...");
-    // ... (toda la lógica de `currentPayloadForNotification` se elimina) ...
-    await notificationService.showSniperAlarmNotification(
-      'Sniper Alarm!',
-      'Found: ${foundItems.join(', ')}',
-      payloadData: currentPayloadForNotification,
-    );
-    */
-    // === FIN DE CAMBIOS ===
-
-    // Navegar a la pantalla de la alarma (esto está bien)
     if (!mounted) {
-      // === INICIO DE CAMBIOS ===
-      // 3. Resetear el flag si el widget ya no está montado
       _isAlarmCurrentlyShowing = false;
-      // === FIN DE CAMBIOS ===
       return;
     }
     logD("[MyAppState] Intentando navegar a AlarmScreen...");
@@ -222,10 +165,7 @@ class _MyAppState extends State<MyApp> {
           "[MyAppState] AlarmScreen cerrada. Deteniendo tono y cancelando notificación.");
       ringtoneService.stop();
       notificationService.cancelSniperAlarmNotification();
-      // === INICIO DE CAMBIOS ===
-      // 4. Resetear el flag cuando la pantalla de alarma se cierra
       _isAlarmCurrentlyShowing = false;
-      // === FIN DE CAMBIOS ===
     });
   }
 
@@ -257,7 +197,10 @@ class _MyAppState extends State<MyApp> {
           title: 'Grow a Garden Tracker',
           theme: AppTheme.cupertinoTheme,
           debugShowCheckedModeBanner: false,
-          home: const HomeScreen(),
+          // === INICIO DE CAMBIOS ===
+          // 2. La pantalla de inicio ahora es tu LoadingScreen
+          home: const LoadingScreen(),
+          // === FIN DE CAMBIOS ===
         ),
       ),
     );
@@ -273,8 +216,6 @@ class AlarmScreen extends StatelessWidget {
     required this.foundItems,
     required this.rarityColor,
   });
-
-  static const String routeName = '/alarm';
 
   @override
   Widget build(BuildContext context) {

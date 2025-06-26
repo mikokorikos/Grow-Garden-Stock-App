@@ -20,3 +20,15 @@ class ToggleSniperItem extends SniperEvent {
   @override
   List<Object> get props => [itemId, isSelected];
 }
+
+// === INICIO DE CAMBIOS ===
+/// Evento para filtrar la lista de items basado en un texto de búsqueda.
+class SearchItems extends SniperEvent {
+  final String query;
+
+  const SearchItems(this.query);
+
+  @override
+  List<Object> get props => [query];
+}
+// === FIN DE CAMBIOS ===
