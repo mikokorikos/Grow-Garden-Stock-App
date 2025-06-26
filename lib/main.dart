@@ -96,82 +96,188 @@ class _MyAppState extends State<MyApp> {
     });
   }
 
-  void _showSniperAlarm(BuildContext context, dynamic eventData) {
+  // Usamos async aquí para poder usar await para la cancelación y el delay
+  void _showSniperAlarm(BuildContext context, dynamic eventData) async {
       List<String> foundItems = ["Item Desconocido"];
-      Color rarityColor = CupertinoColors.systemRed; // Color por defecto
+      Color rarityColor = CupertinoColors.systemRed;
 
       if (eventData is Map) {
-        // Asegurar que el mapa sea Map<String, dynamic> para el payload
         final Map<String, dynamic> dataMap = Map<String, dynamic>.from(eventData);
-
         if (dataMap['type'] == 'sniper_alarm_legacy') {
             foundItems = [dataMap['message']?.toString() ?? "¡Alarma!"];
         } else {
             dynamic itemsData = dataMap['items'];
             if (itemsData is List) {
-              // Si ya es una lista de strings (o puede ser casteada)
               try {
                 foundItems = List<String>.from(itemsData.map((item) => item.toString()));
               } catch (e) {
-                 logE("Error convirtiendo lista de items a List<String>: $e");
+                 logE("[MyAppState] Error convirtiendo lista de items a List<String>: $e. ItemsData: $itemsData");
+                 foundItems = ["Error en items"]; // Fallback
               }
             } else if (itemsData is String) {
               try {
-                // Intenta decodificar si es un JSON string de una lista
                 final decodedList = jsonDecode(itemsData);
                 if (decodedList is List) {
                    foundItems = List<String>.from(decodedList.map((item) => item.toString()));
                 } else {
-                  foundItems = [itemsData]; //Fallback a tomarlo como string simple
+                  logW("[MyAppState] Items decodificados no son una lista: $decodedList");
+                  foundItems = [itemsData];
                 }
               } catch(e) {
-                logW("Items no era un JSON string de lista, tratándolo como string simple: $itemsData. Error: $e");
+                logW("[MyAppState] Items no era un JSON string de lista, tratándolo como string simple: $itemsData. Error: $e");
                 foundItems = [itemsData];
               }
+            } else if (itemsData != null) {
+                logW("[MyAppState] Tipo de itemsData no esperado: ${itemsData.runtimeType}. Valor: $itemsData");
+                foundItems = ["Formato de items no reconocido"];
             }
+
 
             dynamic colorData = dataMap['rarityColorHex'];
             if (colorData is String) {
                try {
                 rarityColor = Color(int.parse(colorData));
                } catch(e) {
-                logE("Error parseando rarityColorHex (String) del payload: $colorData. Error: $e");
+                logE("[MyAppState] Error parseando rarityColorHex (String) del payload: $colorData. Error: $e");
                }
             } else if (colorData is int) {
                 rarityColor = Color(colorData);
+            } else if (colorData != null) {
+                logW("[MyAppState] Tipo de colorData no esperado: ${colorData.runtimeType}. Valor: $colorData");
             }
         }
       } else if (eventData is String) {
         foundItems = [eventData];
       }
 
-      logI("[MyAppState] Evento showSniperAlarm recibido. Mostrando diálogo. Items: $foundItems, Color: $rarityColor");
+      logI("[MyAppState] _showSniperAlarm para items: $foundItems, Color: $rarityColor");
+
+      // 1. Cancelar notificación anterior para ayudar al fullScreenIntent
+      logD("[MyAppState] Cancelando notificación de alarma anterior (ID 999)...");
+      await notificationService.cancelSniperAlarmNotification();
+      // Pequeña demora para asegurar que el sistema procese la cancelación
+      await Future.delayed(const Duration(milliseconds: 200)); // Aumentado ligeramente
+
+      // 2. Sonido
+      logD("[MyAppState] Reproduciendo sonido de alarma...");
       ringtoneService.stop();
       ringtoneService.play();
 
-      // La notificación que se muestra aquí es principalmente para el caso en que la app ya esté en primer plano
-      // y queramos que la notificación aparezca como una "heads-up" normal además del diálogo.
-      // Si el fullScreenIntent ya trajo la app al frente, esta notificación podría ser redundante
-      // o incluso no mostrarse dependiendo de la configuración de Android.
-      // El payload aquí debe ser el mismo que se espera en _handleNotificationPayload
+      // 3. Mostrar nueva notificación (con fullScreenIntent)
+      logD("[MyAppState] Mostrando nueva notificación de alarma (con fullScreenIntent)...");
       Map<String, dynamic> currentPayloadForNotification;
       if (eventData is Map) {
         currentPayloadForNotification = Map<String, dynamic>.from(eventData);
+        // Asegurar que los datos estén en el formato esperado por _handleNotificationPayload
+        currentPayloadForNotification['items'] = foundItems;
+        currentPayloadForNotification['rarityColorHex'] = rarityColor.value;
       } else {
-        currentPayloadForNotification = {'type': 'sniper_alarm_simple', 'items': jsonEncode(foundItems)};
+        // Fallback si eventData no era un mapa (aunque debería serlo)
+        currentPayloadForNotification = {
+          'type': 'sniper_alarm_simple',
+          'items': foundItems, // Ya es List<String>
+          'rarityColorHex': rarityColor.value,
+        };
       }
-      // Aseguramos que el payload tenga los datos que _handleNotificationPayload espera
-      currentPayloadForNotification['items'] = foundItems; // Asegurar que items sea List<String>
-      currentPayloadForNotification['rarityColorHex'] = rarityColor.value;
+       // Asegurar un tipo si no venía
+      currentPayloadForNotification.putIfAbsent('type', () => 'sniper_alarm');
 
 
-      notificationService.showSniperAlarmNotification(
+      await notificationService.showSniperAlarmNotification(
         'Sniper Alarm!',
         'Found: ${foundItems.join(', ')}',
         payloadData: currentPayloadForNotification,
       );
 
-      showCupertinoDialog(
+      // 4. Navegar a la pantalla de alarma (si la app está en primer plano o es traída al frente)
+      // Esto es importante para el caso en que la app esté activa.
+      // Si la app estaba cerrada/fondo, el fullScreenIntent debería haberla traído al frente,
+      // y esta navegación asegura que se muestre la UI de alarma.
+      if (!mounted) return; // Nueva verificación de mounted antes de la navegación
+      logD("[MyAppState] Intentando navegar a AlarmScreen...");
+      navigatorKey.currentState?.push(
+        CupertinoPageRoute(
+          fullscreenDialog: true,
+          builder: (ctx) => AlarmScreen( // Usar la nueva AlarmScreen
+            foundItems: foundItems,
+            rarityColor: rarityColor,
+          ),
+        ),
+      )?.whenComplete(() {
+        logD("[MyAppState] AlarmScreen cerrada (popeada). Deteniendo tono y cancelando notificación activa.");
+        ringtoneService.stop();
+        notificationService.cancelSniperAlarmNotification();
+      });
+  }
+
+  @override
+  void dispose() {
+    _navSubscription?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return MultiBlocProvider(
+      providers: [
+        BlocProvider.value(value: widget.stockBloc..add(ListenToStockUpdates())),
+        BlocProvider.value(value: widget.sniperBloc..add(LoadSniperData())),
+      ],
+      child: BlocListener<StockBloc, StockState>(
+        bloc: widget.stockBloc,
+        listener: (context, state) {
+          if (state is SniperAlarmTriggered) {
+            logI("[MyAppState] SniperAlarmTriggered (desde StockBloc) recibido. Items: ${state.foundItems}");
+            NavigationEventService().fireEvent(
+              NavigationEventType.showSniperAlarm,
+              data: {
+                'type': 'sniper_alarm',
+                'items': state.foundItems,
+                'rarityColorHex': state.rarityColor.value,
+              }
+            );
+          } else if (state is StockError) {
+            logE("[MyAppState] StockError recibido en BlocListener: ${state.message}");
+          }
+        },
+        child: CupertinoApp(
+          navigatorKey: navigatorKey,
+          title: 'Grow a Garden Tracker',
+          theme: AppTheme.cupertinoTheme,
+          debugShowCheckedModeBanner: false,
+          home: const HomeScreen(),
+        ),
+      ),
+    );
+  }
+}
+
+// ========== NUEVA PANTALLA DE ALARMA ==========
+// Podría ir en su propio archivo: lib/presentation/screens/alarm_screen.dart
+class AlarmScreen extends StatelessWidget {
+  final List<String> foundItems;
+  final Color rarityColor;
+
+  const AlarmScreen({
+    super.key,
+    required this.foundItems,
+    required this.rarityColor,
+  });
+
+  static const String routeName = '/alarm';
+
+  @override
+  Widget build(BuildContext context) {
+    // Esta pantalla debería ser lo suficientemente "ruidosa" visualmente y funcionalmente
+    // para actuar como una alarma. SniperAlarmDialog ya tiene mucha de esa lógica.
+    // Lo importante es que esta pantalla pueda ser popeada por el usuario
+    // para que el .whenComplete() en _showSniperAlarm se active.
+    return SniperAlarmDialog( // SniperAlarmDialog ya tiene su propia lógica de pop
+        foundItems: foundItems,
+        rarityColor: rarityColor
+    );
+  }
+}
         context: context,
         barrierDismissible: false,
         builder: (_) => SniperAlarmDialog(
