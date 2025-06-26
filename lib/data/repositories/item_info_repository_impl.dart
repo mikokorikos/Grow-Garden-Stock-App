@@ -10,12 +10,16 @@ class ItemInfoRepositoryImpl implements ItemInfoRepository {
   final ItemInfoRestDataSource itemInfoDataSource;
   final String _className = "ItemInfoRepositoryImpl";
 
-  // Nombre para nuestra "caja" de Hive
   static const String _boxName = 'item_info_cache';
 
   ItemInfoRepositoryImpl({
     required this.itemInfoDataSource,
   });
+
+  Future<bool> isCacheAvailable() async {
+    final box = await Hive.openBox(_boxName);
+    return box.isNotEmpty;
+  }
 
   @override
   Future<Map<String, ItemInfoEntity>> getAllItemsInfo(
@@ -25,7 +29,6 @@ class ItemInfoRepositoryImpl implements ItemInfoRepository {
 
     final box = await Hive.openBox(_boxName);
 
-    // Si no forzamos la actualización y la caja no está vacía, usamos el caché.
     if (!forceRefresh && box.isNotEmpty) {
       logI(
           "[$methodName] Datos encontrados en caché local. Cargando desde Hive.");
@@ -38,7 +41,6 @@ class ItemInfoRepositoryImpl implements ItemInfoRepository {
       return cachedItems;
     }
 
-    // Si no, vamos a la red.
     logI(
         "[$methodName] No hay caché o se forzó la actualización. Obteniendo datos de la API...");
     try {
@@ -50,11 +52,8 @@ class ItemInfoRepositoryImpl implements ItemInfoRepository {
       logI(
           "[$methodName] Información de items obtenida. Guardando en caché...");
 
-      // Limpiar la caja vieja y guardar los nuevos datos
       await box.clear();
       result.forEach((key, value) {
-        // Hive no puede guardar objetos de clases personalizadas directamente sin adaptadores.
-        // La forma más fácil es guardar su representación JSON.
         final itemModel = value as ItemInfoModel;
         box.put(key, {
           'display_name': itemModel.name,

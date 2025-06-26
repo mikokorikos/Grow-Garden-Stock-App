@@ -21,16 +21,18 @@ class SniperBloc extends Bloc<SniperEvent, SniperState> {
         super(SniperInitial()) {
     on<LoadSniperData>(_onLoadSniperData);
     on<ToggleSniperItem>(_onToggleSniperItem);
-    // === INICIO DE CAMBIOS ===
+
+    // === INICIO DE LA CORRECCIÓN ===
+    // Esta es la línea que faltaba. Le dice al BLoC qué hacer
+    // cuando recibe un evento de tipo "SearchItems".
     on<SearchItems>(_onSearchItems);
-    // === FIN DE CAMBIOS ===
+    // === FIN DE LA CORRECCIÓN ===
   }
 
   Future<void> _onLoadSniperData(
     LoadSniperData event,
     Emitter<SniperState> emit,
   ) async {
-    // ... (El inicio de la función se queda igual) ...
     emit(SniperLoading());
     try {
       final results = await Future.wait([
@@ -50,7 +52,6 @@ class SniperBloc extends Bloc<SniperEvent, SniperState> {
         'Events & Special': [],
       };
 
-      // ... (La lógica de agrupación se queda igual) ...
       for (final item in allItems) {
         final name = item.name.toLowerCase();
         final rarity = item.rarity.toLowerCase();
@@ -87,14 +88,11 @@ class SniperBloc extends Bloc<SniperEvent, SniperState> {
 
       logI("[$_className] Datos de sniper cargados y procesados exitosamente.");
 
-      // === INICIO DE CAMBIOS ===
-      // Al cargar, la lista filtrada es igual a la lista completa.
       emit(SniperLoaded(
         allItemsByCategory: groupedItems,
-        filteredItemsByCategory: groupedItems, // Inicialmente son las mismas
+        filteredItemsByCategory: groupedItems,
         selectedItemIds: selectedIds,
       ));
-      // === FIN DE CAMBIOS ===
     } on AppException catch (e, s) {
       logE("[$_className] AppException al cargar datos de sniper: ${e.message}",
           error: e, stackTrace: s);
@@ -107,30 +105,52 @@ class SniperBloc extends Bloc<SniperEvent, SniperState> {
     }
   }
 
-  // ... (El método _onToggleSniperItem se queda igual) ...
   Future<void> _onToggleSniperItem(
     ToggleSniperItem event,
     Emitter<SniperState> emit,
   ) async {
-    // ...
+    if (state is SniperLoaded) {
+      final currentState = state as SniperLoaded;
+      final currentSelectedIds = Set<String>.from(currentState.selectedItemIds);
+
+      if (event.isSelected) {
+        currentSelectedIds.add(event.itemId);
+      } else {
+        currentSelectedIds.remove(event.itemId);
+      }
+
+      // Creamos una copia del estado filtrado para no perder la búsqueda actual
+      final currentFilteredState = currentState.filteredItemsByCategory;
+
+      emit(currentState.copyWith(
+          selectedItemIds: currentSelectedIds,
+          filteredItemsByCategory: currentFilteredState));
+
+      final updatedList = currentSelectedIds.toList();
+      try {
+        await _sniperRepository.saveSniperList(updatedList);
+        final service = FlutterBackgroundService();
+        if (await service.isRunning()) {
+          service.invoke('updateSniperList', {'sniper_list': updatedList});
+        }
+      } catch (e) {
+        emit(SniperError("Error al guardar tu selección: ${e.toString()}"));
+      }
+    }
   }
 
-  // === INICIO DE CAMBIOS ===
-  /// Maneja el evento de búsqueda de items.
   void _onSearchItems(SearchItems event, Emitter<SniperState> emit) {
     if (state is! SniperLoaded) return;
 
     final currentState = state as SniperLoaded;
     final query = event.query.toLowerCase().trim();
 
-    // Si la búsqueda está vacía, mostramos todos los items.
     if (query.isEmpty) {
       emit(currentState.copyWith(
           filteredItemsByCategory: currentState.allItemsByCategory));
       return;
     }
 
-    // Si hay una búsqueda, filtramos.
     final originalMap = currentState.allItemsByCategory;
     final filteredMap = <String, List<ItemInfoEntity>>{};
 
@@ -139,7 +159,6 @@ class SniperBloc extends Bloc<SniperEvent, SniperState> {
         return item.name.toLowerCase().contains(query);
       }).toList();
 
-      // Solo añadimos la categoría si tiene items que coinciden con la búsqueda.
       if (filteredItems.isNotEmpty) {
         filteredMap[category] = filteredItems;
       }
@@ -147,5 +166,4 @@ class SniperBloc extends Bloc<SniperEvent, SniperState> {
 
     emit(currentState.copyWith(filteredItemsByCategory: filteredMap));
   }
-  // === FIN DE CAMBIOS ===
 }

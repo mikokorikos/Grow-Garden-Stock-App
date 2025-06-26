@@ -4,7 +4,7 @@ import 'dart:convert';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:http/http.dart' as http;
-import 'package:hive_flutter/hive_flutter.dart'; // IMPORTANTE AÑADIR
+import 'package:hive_flutter/hive_flutter.dart';
 import 'package:grow_garden_tracker/core/background/background_service_handler.dart';
 import 'package:grow_garden_tracker/core/database/sniper_repository.dart';
 import 'package:grow_garden_tracker/core/services/navigation_event_service.dart';
@@ -20,7 +20,6 @@ import 'core/theme/app_theme.dart';
 import 'data/datasources/item_info_rest_data_source.dart';
 import 'presentation/bloc/stock/stock_bloc.dart';
 import 'presentation/screens/home_screen.dart';
-import 'presentation/screens/loading_screen.dart'; // IMPORTANTE AÑADIR
 import 'domain/usecases/get_all_items_info_usecase.dart';
 
 // Instancias de los servicios
@@ -28,19 +27,14 @@ final RingtoneService ringtoneService = RingtoneService();
 final NotificationService notificationService = NotificationService();
 
 Future<void> main() async {
-  // Asegura que los bindings de Flutter estén listos
   WidgetsFlutterBinding.ensureInitialized();
 
-  // === INICIO DE CAMBIOS ===
-  // 1. Inicializar Hive para la base de datos local
+  // Inicializamos los servicios necesarios para el funcionamiento de la app
   await Hive.initFlutter();
-  // === FIN DE CAMBIOS ===
-
-  // Inicializar el resto de los servicios
   await notificationService.initialize();
   await BackgroundServiceHandler.initializeService();
 
-  // Inyección de dependencias (creación de BLoCs y repositorios)
+  // Inyección de dependencias
   final client = http.Client();
   final itemInfoDataSource = ItemInfoRestDataSourceImpl(client: client);
   final itemInfoRepository =
@@ -54,7 +48,6 @@ Future<void> main() async {
     sniperRepository: sniperRepository,
   );
 
-  // Ejecutar la aplicación
   runApp(MyApp(
     stockBloc: stockBloc,
     sniperBloc: sniperBloc,
@@ -79,7 +72,6 @@ class _MyAppState extends State<MyApp> {
   StreamSubscription? _navSubscription;
   StreamSubscription? _alarmServiceSubscription;
   final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
-
   bool _isAlarmCurrentlyShowing = false;
 
   @override
@@ -92,9 +84,6 @@ class _MyAppState extends State<MyApp> {
         final context = navigatorKey.currentContext;
         if (context != null) {
           _showSniperAlarm(context, event.data);
-        } else {
-          logW(
-              "[MyAppState] navigatorKey.currentContext es nulo. No se puede mostrar la alarma de sniper.");
         }
       }
     });
@@ -102,8 +91,6 @@ class _MyAppState extends State<MyApp> {
     _alarmServiceSubscription =
         FlutterBackgroundService().on('sniperAlarm').listen((eventData) {
       if (eventData != null) {
-        logI(
-            "[MyAppState] Evento 'sniperAlarm' recibido directamente del servicio. Disparando evento de navegación.");
         NavigationEventService()
             .fireEvent(NavigationEventType.showSniperAlarm, data: eventData);
       }
@@ -112,8 +99,6 @@ class _MyAppState extends State<MyApp> {
 
   void _showSniperAlarm(BuildContext context, dynamic eventData) async {
     if (_isAlarmCurrentlyShowing) {
-      logW(
-          "[MyAppState] Alarma ya se está mostrando. Ignorando nueva solicitud.");
       return;
     }
     _isAlarmCurrentlyShowing = true;
@@ -134,10 +119,7 @@ class _MyAppState extends State<MyApp> {
       }
     }
 
-    logI(
-        "[MyAppState] _showSniperAlarm para items: $foundItems, Color: $rarityColor");
-
-    logD("[MyAppState] Cancelando notificación de alarma anterior (ID 999)...");
+    logD("[MyAppState] Cancelando notificación de alarma anterior...");
     await notificationService.cancelSniperAlarmNotification();
     await Future.delayed(const Duration(milliseconds: 100));
 
@@ -149,7 +131,6 @@ class _MyAppState extends State<MyApp> {
       _isAlarmCurrentlyShowing = false;
       return;
     }
-    logD("[MyAppState] Intentando navegar a AlarmScreen...");
     navigatorKey.currentState
         ?.push(
       CupertinoPageRoute(
@@ -161,8 +142,7 @@ class _MyAppState extends State<MyApp> {
       ),
     )
         ?.whenComplete(() {
-      logD(
-          "[MyAppState] AlarmScreen cerrada. Deteniendo tono y cancelando notificación.");
+      logD("AlarmScreen cerrada. Deteniendo servicios de alarma.");
       ringtoneService.stop();
       notificationService.cancelSniperAlarmNotification();
       _isAlarmCurrentlyShowing = false;
@@ -184,24 +164,13 @@ class _MyAppState extends State<MyApp> {
             value: widget.stockBloc..add(ListenToStockUpdates())),
         BlocProvider.value(value: widget.sniperBloc..add(LoadSniperData())),
       ],
-      child: BlocListener<StockBloc, StockState>(
-        bloc: widget.stockBloc,
-        listener: (context, state) {
-          if (state is StockError) {
-            logE(
-                "[MyAppState] StockError recibido en BlocListener: ${state.message}");
-          }
-        },
-        child: CupertinoApp(
-          navigatorKey: navigatorKey,
-          title: 'Grow a Garden Tracker',
-          theme: AppTheme.cupertinoTheme,
-          debugShowCheckedModeBanner: false,
-          // === INICIO DE CAMBIOS ===
-          // 2. La pantalla de inicio ahora es tu LoadingScreen
-          home: const LoadingScreen(),
-          // === FIN DE CAMBIOS ===
-        ),
+      child: CupertinoApp(
+        navigatorKey: navigatorKey,
+        title: 'Grow a Garden Tracker',
+        theme: AppTheme.cupertinoTheme,
+        debugShowCheckedModeBanner: false,
+        // La aplicación ahora inicia directamente en la pantalla principal.
+        home: const HomeScreen(),
       ),
     );
   }
