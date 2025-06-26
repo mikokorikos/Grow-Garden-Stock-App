@@ -1,11 +1,13 @@
 import 'dart:async';
+import 'dart:io' show Platform;
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/services.dart'; // Para HapticFeedback
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:grow_garden_tracker/core/database/sniper_repository.dart';
+import 'package:grow_garden_tracker/core/theme/app_theme.dart';
 import 'package:grow_garden_tracker/presentation/bloc/stock/stock_bloc.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'dart:io' show Platform;
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -14,18 +16,18 @@ class SettingsScreen extends StatefulWidget {
   State<SettingsScreen> createState() => _SettingsScreenState();
 }
 
-class _SettingsScreenState extends State<SettingsScreen> with WidgetsBindingObserver {
+class _SettingsScreenState extends State<SettingsScreen>
+    with WidgetsBindingObserver {
   final _service = FlutterBackgroundService();
   StreamSubscription<Map<String, dynamic>?>? _serviceSubscription;
   bool _isServiceRunning = false;
-  
-  // Timer para verificación periódica de permisos
+
   Timer? _permissionCheckTimer;
 
   PermissionStatus _notificationStatus = PermissionStatus.denied;
   PermissionStatus _batteryStatus = PermissionStatus.denied;
-  PermissionStatus _systemAlertStatus = PermissionStatus.denied;
-  PermissionStatus _exactAlarmStatus = PermissionStatus.denied;
+  PermissionStatus _systemAlertStatus = PermissionStatus.granted; // Default para iOS
+  PermissionStatus _exactAlarmStatus = PermissionStatus.granted; // Default para iOS
 
   bool _areAllPermissionsGranted = false;
 
@@ -35,20 +37,19 @@ class _SettingsScreenState extends State<SettingsScreen> with WidgetsBindingObse
     WidgetsBinding.instance.addObserver(this);
     listenToServiceChanges();
     _checkAllPermissions();
-    // Verificación periódica cada 2 segundos cuando la app está en primer plano
     _startPeriodicPermissionCheck();
   }
 
-  // Inicia la verificación periódica de permisos
   void _startPeriodicPermissionCheck() {
-    _permissionCheckTimer = Timer.periodic(const Duration(seconds: 2), (timer) {
+    _permissionCheckTimer?.cancel(); // Cancelar timer anterior si existe
+    _permissionCheckTimer =
+        Timer.periodic(const Duration(seconds: 2), (timer) {
       if (mounted) {
         _checkAllPermissions();
       }
     });
   }
 
-  // Para la verificación periódica
   void _stopPeriodicPermissionCheck() {
     _permissionCheckTimer?.cancel();
     _permissionCheckTimer = null;
@@ -57,97 +58,73 @@ class _SettingsScreenState extends State<SettingsScreen> with WidgetsBindingObse
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
-    
-    switch (state) {
-      case AppLifecycleState.resumed:
-        debugPrint("App resumed, checking permissions and starting periodic check.");
-        _checkAllPermissions();
-        _startPeriodicPermissionCheck();
-        break;
-      case AppLifecycleState.paused:
-        debugPrint("App paused, stopping periodic check.");
-        _stopPeriodicPermissionCheck();
-        break;
-      case AppLifecycleState.inactive:
-        debugPrint("App inactive.");
-        break;
-      case AppLifecycleState.detached:
-        debugPrint("App detached.");
-        _stopPeriodicPermissionCheck();
-        break;
-      case AppLifecycleState.hidden:
-        debugPrint("App hidden.");
-        _stopPeriodicPermissionCheck();
-        break;
+    if (state == AppLifecycleState.resumed) {
+      debugPrint("App resumed, checking permissions and starting periodic check.");
+      _checkAllPermissions();
+      _startPeriodicPermissionCheck();
+    } else if (state == AppLifecycleState.paused) {
+      debugPrint("App paused, stopping periodic check.");
+      _stopPeriodicPermissionCheck();
     }
   }
 
   Future<void> _checkAllPermissions() async {
-    try {
-      // Verificar cada permiso individualmente con un pequeño delay
-      final notifStatus = await Permission.notification.status;
-      await Future.delayed(const Duration(milliseconds: 100));
-      
-      final battStatus = await Permission.ignoreBatteryOptimizations.status;
-      await Future.delayed(const Duration(milliseconds: 100));
-      
-      PermissionStatus systemAlertStatus = PermissionStatus.granted; // iOS default
-      PermissionStatus exactAlarmStatus = PermissionStatus.granted; // iOS default
-      if (Platform.isAndroid) {
-        systemAlertStatus = await Permission.systemAlertWindow.status;
-        await Future.delayed(const Duration(milliseconds: 100));
-        exactAlarmStatus = await Permission.scheduleExactAlarm.status;
-      }
+    final notifStatus = await Permission.notification.status;
+    final battStatus = await Permission.ignoreBatteryOptimizations.status;
+    PermissionStatus systemAlert = _systemAlertStatus;
+    PermissionStatus exactAlarm = _exactAlarmStatus;
 
-      if (!mounted) return;
+    if (Platform.isAndroid) {
+      systemAlert = await Permission.systemAlertWindow.status;
+      exactAlarm = await Permission.scheduleExactAlarm.status;
+    }
 
-      // Solo actualizar el estado si hay cambios
-      bool hasChanges = false;
-      if (_notificationStatus != notifStatus ||
-          _batteryStatus != battStatus ||
-          _systemAlertStatus != systemAlertStatus ||
-          _exactAlarmStatus != exactAlarmStatus) {
-        hasChanges = true;
-      }
+    if (!mounted) return;
 
-      if (hasChanges) {
-        setState(() {
-          _notificationStatus = notifStatus;
-          _batteryStatus = battStatus;
-          _systemAlertStatus = systemAlertStatus;
-          _exactAlarmStatus = exactAlarmStatus;
+    bool newAllPermissionsGranted;
+    if (Platform.isAndroid) {
+      newAllPermissionsGranted = notifStatus.isGranted &&
+          battStatus.isGranted &&
+          systemAlert.isGranted &&
+          exactAlarm.isGranted;
+    } else {
+      newAllPermissionsGranted = notifStatus.isGranted /*&& battStatus.isGranted*/; // Battery Opt no es usualmente manejable en iOS así.
+    }
 
-          if (Platform.isAndroid) {
-            _areAllPermissionsGranted = notifStatus.isGranted &&
-                battStatus.isGranted &&
-                systemAlertStatus.isGranted &&
-                exactAlarmStatus.isGranted;
-          } else {
-            _areAllPermissionsGranted = notifStatus.isGranted && battStatus.isGranted;
-          }
-        });
-        
-        debugPrint("Permissions updated - Notification: $notifStatus, Battery: $battStatus, SystemAlert: $systemAlertStatus, ExactAlarm: $exactAlarmStatus");
-        debugPrint("All permissions granted: $_areAllPermissionsGranted");
-      }
-    } catch (e) {
-      debugPrint("Error checking permissions: $e");
+    // Solo actualizar si hay cambios para evitar rebuilds innecesarios
+    if (notifStatus != _notificationStatus ||
+        battStatus != _batteryStatus ||
+        systemAlert != _systemAlertStatus ||
+        exactAlarm != _exactAlarmStatus ||
+        newAllPermissionsGranted != _areAllPermissionsGranted) {
+      setState(() {
+        _notificationStatus = notifStatus;
+        _batteryStatus = battStatus;
+        _systemAlertStatus = systemAlert;
+        _exactAlarmStatus = exactAlarm;
+        _areAllPermissionsGranted = newAllPermissionsGranted;
+      });
+      debugPrint(
+          "Permissions updated - Notif: $notifStatus, Batt: $battStatus, AlertWin: $systemAlert, ExactAlarm: $exactAlarm. AllGranted: $_areAllPermissionsGranted");
     }
   }
 
   void listenToServiceChanges() {
     checkServiceStatus();
-    _serviceSubscription = _service.on('service_started').listen((event) {
-      if (mounted) setState(() => _isServiceRunning = true);
-    });
-    _service.on('service_stopped').listen((event) {
-      if (mounted) setState(() => _isServiceRunning = false);
+    _serviceSubscription =
+        _service.on('service_changed').listen((event) { // Escuchar un evento más genérico
+      if (mounted && event != null) {
+         final bool running = event['is_running'] ?? false;
+         if(_isServiceRunning != running) {
+            setState(() => _isServiceRunning = running);
+         }
+      }
     });
   }
 
   Future<void> checkServiceStatus() async {
     final running = await _service.isRunning();
-    if (mounted) {
+    if (mounted && _isServiceRunning != running) {
       setState(() {
         _isServiceRunning = running;
       });
@@ -155,21 +132,24 @@ class _SettingsScreenState extends State<SettingsScreen> with WidgetsBindingObse
   }
 
   Future<void> _handleServiceToggle(bool value) async {
+    HapticFeedback.lightImpact();
     if (value) {
-      await _checkAllPermissions();
+      await _checkAllPermissions(); // Re-verificar por si acaso
       if (_areAllPermissionsGranted) {
         final sniperList = await SniperRepository().loadSniperList();
         await _service.startService();
         _service.invoke('updateSniperList', {'sniper_list': sniperList});
         context.read<StockBloc>().add(ListenToStockUpdates());
-        setState(() => _isServiceRunning = true);
+        // El estado _isServiceRunning se actualizará por el listener
       } else {
         _showPermissionsNeededDialog();
+         // Forzar el switch a apagado si no se concedieron permisos
+        if(mounted) setState(() => _isServiceRunning = false);
       }
     } else {
       _service.invoke("stopService");
       context.read<StockBloc>().add(StopListeningToStockUpdates());
-      setState(() => _isServiceRunning = false);
+      // El estado _isServiceRunning se actualizará por el listener
     }
   }
 
@@ -177,48 +157,40 @@ class _SettingsScreenState extends State<SettingsScreen> with WidgetsBindingObse
     showCupertinoDialog(
       context: context,
       builder: (context) => CupertinoAlertDialog(
-        title: const Text('Permisos Requeridos'),
-        content: const Text(
-            'Para garantizar el funcionamiento 24/7 y las alarmas, todos los permisos deben estar "Concedidos". Por favor, actívalos para poder iniciar el servicio.'),
+        title: Text('Permisos Requeridos', style: AppTheme.headlineStyle.copyWith(fontSize: 18)),
+        content: Text(
+            'Para garantizar el funcionamiento 24/7 y las alarmas, todos los permisos deben estar "Concedidos". Por favor, actívalos para poder iniciar el servicio.', style: AppTheme.bodyTextStyle.copyWith(fontSize: 14)),
         actions: <CupertinoDialogAction>[
           CupertinoDialogAction(
               isDefaultAction: true,
-              child: const Text('Entendido'),
-              onPressed: () => Navigator.of(context).pop()),
+              child: Text('Entendido', style: TextStyle(color: AppTheme.primaryAppColor, fontWeight: FontWeight.bold)),
+              onPressed: () {
+                HapticFeedback.lightImpact();
+                Navigator.of(context).pop();
+              }),
         ],
       ),
     );
   }
 
   Future<void> _handlePermissionTap(Permission permission) async {
-    try {
-      final currentStatus = await permission.status;
-      debugPrint("Current permission status for $permission: $currentStatus");
-
-      if (currentStatus.isPermanentlyDenied || 
-          permission == Permission.systemAlertWindow ||
-          permission == Permission.scheduleExactAlarm ||
-          permission == Permission.ignoreBatteryOptimizations) {
-        // Estos permisos requieren ir a configuración
-        debugPrint("Opening app settings for $permission");
-        await openAppSettings();
-      } else if (currentStatus.isDenied) {
-        // Solicitar el permiso directamente
-        debugPrint("Requesting permission for $permission");
-        final newStatus = await permission.request();
-        debugPrint("Permission result for $permission: $newStatus");
-        
-        // Verificar inmediatamente después de la solicitud
-        await Future.delayed(const Duration(milliseconds: 500));
-        await _checkAllPermissions();
-      }
-    } catch (e) {
-      debugPrint("Error handling permission tap: $e");
+    HapticFeedback.lightImpact();
+    final currentStatus = await permission.status;
+    if (currentStatus.isPermanentlyDenied ||
+        [Permission.systemAlertWindow, Permission.scheduleExactAlarm, Permission.ignoreBatteryOptimizations].contains(permission)) {
+      await openAppSettings();
+    } else if (currentStatus.isDenied) {
+      await permission.request();
     }
+    // Después de interactuar con el permiso (solicitar o ir a settings),
+    // esperamos un poco y luego re-verificamos todos.
+    await Future.delayed(const Duration(milliseconds: 300));
+    _checkAllPermissions();
+
   }
 
-  // Método para forzar verificación manual
   Future<void> _forcePermissionCheck() async {
+    HapticFeedback.mediumImpact();
     debugPrint("Force checking permissions...");
     await _checkAllPermissions();
   }
@@ -233,92 +205,115 @@ class _SettingsScreenState extends State<SettingsScreen> with WidgetsBindingObse
 
   @override
   Widget build(BuildContext context) {
+    final cupertinoTheme = AppTheme.cupertinoTheme;
     return CupertinoPageScaffold(
+      backgroundColor: AppTheme.lightScaffoldBackgroundColor,
       navigationBar: CupertinoNavigationBar(
-        middle: const Text('Ajustes del Sniper'),
-        // Agregar botón de refresh para verificar permisos manualmente
+        middle: Text('Ajustes del Sniper', style: cupertinoTheme.textTheme?.navTitleTextStyle),
         trailing: CupertinoButton(
           padding: EdgeInsets.zero,
-          child: const Icon(CupertinoIcons.refresh),
+          child: const Icon(CupertinoIcons.refresh_thick, size: 24), // Icono más visible
           onPressed: _forcePermissionCheck,
         ),
       ),
-      child: ListView(
+      child: ListView( // Usar ListView para mejor scroll y estructura
+        padding: const EdgeInsets.only(bottom: 20),
         children: [
           const SizedBox(height: 20),
-          CupertinoListSection.insetGrouped(
-            header: const Text('ESTADO DEL SERVICIO'),
-            children: [
-              CupertinoListTile(
-                title: Text(
-                  _isServiceRunning ? 'Servicio Activo' : 'Servicio Inactivo',
-                  style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: _isServiceRunning
-                          ? CupertinoColors.activeGreen
-                          : CupertinoColors.systemRed),
-                ),
-                subtitle: Text(_areAllPermissionsGranted
-                    ? 'Activa para buscar stock 24/7.'
-                    : 'Se requieren todos los permisos.'),
-                trailing: Transform.scale(
-                  scale: 0.9,
-                  child: CupertinoSwitch(
-                    value: _isServiceRunning,
-                    onChanged: _areAllPermissionsGranted || _isServiceRunning
-                        ? (value) => _handleServiceToggle(value)
-                        : null,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          CupertinoListSection.insetGrouped(
-            header: const Text('PERMISOS REQUERIDOS'),
-            footer: const Text(
-                'Para un monitoreo sin fallos, se recomienda "Bloquear" la app en la vista de aplicaciones recientes de tu teléfono. Toca el botón ↻ arriba para verificar permisos manualmente.'),
-            children: [
-              _buildPermissionTile(
-                title: 'Notificaciones',
-                subtitle: 'Muestra la notificación del servicio y las alarmas.',
-                status: _notificationStatus,
-                onTap: () => _handlePermissionTap(Permission.notification),
-              ),
-              _buildPermissionTile(
-                title: 'Optimización de Batería',
-                subtitle: 'Evita que el sistema detenga la app en segundo plano.',
-                status: _batteryStatus,
-                onTap: () => _handlePermissionTap(Permission.ignoreBatteryOptimizations),
-              ),
-              if (Platform.isAndroid)
-                _buildPermissionTile(
-                  title: 'Mostrar sobre otras apps',
-                  subtitle: 'Permite que la alarma se muestre sobre otras aplicaciones.',
-                  status: _systemAlertStatus,
-                  onTap: () => _handlePermissionTap(Permission.systemAlertWindow),
-                ),
-              if (Platform.isAndroid)
-                _buildPermissionTile(
-                  title: 'Alarmas y Recordatorios',
-                  subtitle: 'Requerido para alarmas de pantalla completa en Android 12+.',
-                  status: _exactAlarmStatus,
-                  onTap: () => _handlePermissionTap(Permission.scheduleExactAlarm),
-                ),
-            ],
-          ),
-          CupertinoListSection.insetGrouped(
-              header: const Text('IMPORTANTE'),
-              children: [
-                CupertinoListTile(
-                  title: const Text('Añadir Sonido de Alarma (Opcional)'),
-                  subtitle: const Text(
-                      'Para un sonido de alarma personalizado, agrega un archivo "alarm_sound.wav" en la carpeta "android/app/src/main/res/raw".'),
-                  leading: const Icon(CupertinoIcons.speaker_2_fill),
-                )
-              ])
+          _buildServiceStatusSection(cupertinoTheme),
+          _buildPermissionsSection(cupertinoTheme),
+          _buildImportantInfoSection(cupertinoTheme),
         ],
       ),
     );
+  }
+
+  Widget _buildServiceStatusSection(CupertinoThemeData cupertinoTheme) {
+    return CupertinoListSection.insetGrouped(
+      backgroundColor: Colors.transparent,
+      header: Text('ESTADO DEL SERVICIO', style: cupertinoTheme.textTheme?.textStyle?.copyWith(color: AppTheme.darkTextColor.withOpacity(0.6))),
+      children: [
+        CupertinoListTile(
+          backgroundColor: AppTheme.glassBackgroundColor.withOpacity(0.7),
+          title: Text(
+            _isServiceRunning ? 'Servicio Activo' : 'Servicio Inactivo',
+            style: AppTheme.bodyTextStyle.copyWith(
+                fontWeight: FontWeight.w600,
+                color: _isServiceRunning
+                    ? AppTheme.electricBlue // Usar color vibrante
+                    : CupertinoColors.systemRed),
+          ),
+          subtitle: Text(
+              _areAllPermissionsGranted || _isServiceRunning
+                  ? 'Activa para buscar stock 24/7.'
+                  : 'Se requieren todos los permisos.',
+              style: AppTheme.captionTextStyle),
+          trailing: CupertinoSwitch(
+            value: _isServiceRunning,
+            activeColor: AppTheme.primaryAppColor,
+            onChanged: (value) => _handleServiceToggle(value),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPermissionsSection(CupertinoThemeData cupertinoTheme) {
+    return CupertinoListSection.insetGrouped(
+      backgroundColor: Colors.transparent,
+      header: Text('PERMISOS REQUERIDOS', style: cupertinoTheme.textTheme?.textStyle?.copyWith(color: AppTheme.darkTextColor.withOpacity(0.6))),
+      footer: Padding(
+        padding: const EdgeInsets.only(top: 8.0),
+        child: Text(
+            'Para un monitoreo sin fallos, se recomienda "Bloquear" la app en la vista de aplicaciones recientes de tu teléfono. Toca el botón ↻ arriba para verificar permisos manualmente.',
+            style: AppTheme.captionTextStyle.copyWith(fontSize: 12.5)),
+      ),
+      children: [
+        _buildPermissionTile(
+          title: 'Notificaciones',
+          subtitle: 'Muestra la notificación del servicio y las alarmas.',
+          status: _notificationStatus,
+          onTap: () => _handlePermissionTap(Permission.notification),
+        ),
+        _buildPermissionTile(
+          title: 'Optimización de Batería',
+          subtitle: 'Evita que el sistema detenga la app en segundo plano.',
+          status: _batteryStatus,
+          onTap: () => _handlePermissionTap(Permission.ignoreBatteryOptimizations),
+        ),
+        if (Platform.isAndroid) ...[
+          _buildPermissionTile(
+            title: 'Mostrar sobre otras apps',
+            subtitle:
+                'Permite que la alarma se muestre sobre otras aplicaciones.',
+            status: _systemAlertStatus,
+            onTap: () => _handlePermissionTap(Permission.systemAlertWindow),
+          ),
+          _buildPermissionTile(
+            title: 'Alarmas y Recordatorios',
+            subtitle:
+                'Requerido para alarmas de pantalla completa en Android 12+.',
+            status: _exactAlarmStatus,
+            onTap: () => _handlePermissionTap(Permission.scheduleExactAlarm),
+          ),
+        ]
+      ],
+    );
+  }
+
+  Widget _buildImportantInfoSection(CupertinoThemeData cupertinoTheme) {
+     return CupertinoListSection.insetGrouped(
+        backgroundColor: Colors.transparent,
+        header: Text('IMPORTANTE', style: cupertinoTheme.textTheme?.textStyle?.copyWith(color: AppTheme.darkTextColor.withOpacity(0.6))),
+        children: [
+          CupertinoListTile(
+            backgroundColor: AppTheme.glassBackgroundColor.withOpacity(0.7),
+            title: Text('Añadir Sonido de Alarma (Opcional)', style: AppTheme.bodyTextStyle.copyWith(fontWeight: FontWeight.w500)),
+            subtitle: Text(
+                'Para un sonido de alarma personalizado, agrega un archivo "alarm_sound.wav" en la carpeta "android/app/src/main/res/raw".', style: AppTheme.captionTextStyle),
+            leading: Icon(CupertinoIcons.speaker_2_fill, color: AppTheme.primaryAppColor.withOpacity(0.8)),
+          )
+        ]);
   }
 
   CupertinoListTile _buildPermissionTile({
@@ -329,19 +324,23 @@ class _SettingsScreenState extends State<SettingsScreen> with WidgetsBindingObse
   }) {
     final bool isGranted = status.isGranted;
     return CupertinoListTile(
-      title: Text(title),
-      subtitle: Text(subtitle, maxLines: 2),
+      backgroundColor: AppTheme.glassBackgroundColor.withOpacity(0.7),
+      title: Text(title, style: AppTheme.bodyTextStyle.copyWith(fontWeight: FontWeight.w500)),
+      subtitle: Text(subtitle, style: AppTheme.captionTextStyle, maxLines: 2),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(isGranted ? 'Concedido' : 'Denegado',
-              style: TextStyle(
-                  color: isGranted
-                      ? CupertinoColors.activeGreen
-                      : CupertinoColors.systemRed)),
+          Text(
+            isGranted ? 'Concedido' : 'Denegado',
+            style: AppTheme.captionTextStyle.copyWith(
+                color: isGranted
+                    ? AppTheme.electricBlue // Usar color vibrante
+                    : CupertinoColors.systemRed,
+                fontWeight: isGranted ? FontWeight.w600 : FontWeight.normal),
+          ),
           const SizedBox(width: 8),
-          const Icon(CupertinoIcons.right_chevron,
-              color: CupertinoColors.systemGrey2),
+          Icon(CupertinoIcons.right_chevron,
+              color: CupertinoColors.systemGrey2.withOpacity(0.7), size: 20),
         ],
       ),
       onTap: onTap,

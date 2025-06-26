@@ -133,12 +133,24 @@ class _MyAppState extends State<MyApp> {
     }
     navigatorKey.currentState
         ?.push(
-      CupertinoPageRoute(
-        fullscreenDialog: true,
-        builder: (ctx) => AlarmScreen(
+      PageRouteBuilder(
+        pageBuilder: (context, animation, secondaryAnimation) => AlarmScreen(
           foundItems: foundItems,
           rarityColor: rarityColor,
         ),
+        fullscreenDialog: true,
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          // Usar un FadeTransition para la aparición de la pantalla de alarma
+          return FadeTransition(
+            opacity: CurvedAnimation(
+              parent: animation,
+              curve: Curves.easeOut, // Curva suave para la entrada
+              reverseCurve: Curves.easeIn, // Curva suave para la salida
+            ),
+            child: child,
+          );
+        },
+        transitionDuration: const Duration(milliseconds: 400), // Duración de la transición
       ),
     )
         ?.whenComplete(() {
